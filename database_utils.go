@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS person (
    	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     phone TEXT UNIQUE,
-    email TEXT NOT NULL UNIQUE CHECK (email ~ '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$')
+    email TEXT NOT NULL UNIQUE CHECK (email ~ '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
+    password TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS admin (
@@ -65,10 +66,10 @@ CREATE TABLE IF NOT EXISTS exam (
 );`
 
 const addExampleData = `
-INSERT INTO person(name, phone, email) VALUES 
-    ('ivan', '0881234563', 'test@test.com'),
-    ('ivan1', '0881234564', 'test1@test.com'),
-    ('ivan2', '0881234565', 'test2@test.com');
+INSERT INTO person(name, phone, email, password) VALUES 
+    ('ivan', '0881234563', 'test@test.com', 'test_pas_123'),
+    ('ivan1', '0881234564', 'test1@test.com', 'test_pas_123'),
+    ('ivan2', '0881234565', 'test2@test.com', 'test_pas_123');
 
 INSERT INTO admin(person_id) VALUES 
     ((SELECT id FROM person WHERE name='ivan'));
