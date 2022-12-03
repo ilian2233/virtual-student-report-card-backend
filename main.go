@@ -3,18 +3,24 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	db, err := createDatabaseConnection()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	h := handler{
-		secretKet: "", //TODO: Load from env file
+		secretKet: os.Getenv("SECRET_KEY"),
 		db:        db,
 	}
 
