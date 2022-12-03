@@ -2,21 +2,43 @@ package main
 
 import (
 	"log"
+	"net/http"
 
-	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
 
 func main() {
-	db, err := sqlx.Connect("postgres", "user=test_user dbname=testdb sslmode=disable")
+	db, err := createDatabaseConnection()
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
-	log.Println("DB connection successfully")
 
-	db.MustExec(schema)
-	log.Println("DB schema created successfully")
+	h := handler{
+		secretKet: "", //TODO: Load from env file
+		db:        db,
+	}
 
-	db.MustExec(addExampleData)
-	log.Println("DB populated with example data")
+	//studentHandler := http.NewServeMux()
+	//studentHandler.HandleFunc("/exam")
+	//
+	//teacherHandler := http.NewServeMux()
+	//teacherHandler.HandleFunc("/exam")
+	//teacherHandler.HandleFunc("/student")
+	//
+	//adminHandler := http.NewServeMux()
+	//adminHandler.HandleFunc("/curriculum")
+	//adminHandler.HandleFunc("/course")
+	//adminHandler.HandleFunc("/exam")
+	//adminHandler.HandleFunc("/student")
+	//adminHandler.HandleFunc("/teacher")
+
+	mainHandler := http.NewServeMux()
+	mainHandler.HandleFunc("/login", h.handleLogin)
+	//mainHandler.Handle("/student", studentHandler)
+	//mainHandler.Handle("/teacher", teacherHandler)
+	//mainHandler.Handle("/admin", adminHandler)
+	if err = http.ListenAndServe(":8000", mainHandler); err != nil {
+		panic(err)
+	}
+
 }

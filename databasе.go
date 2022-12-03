@@ -1,5 +1,11 @@
 package main
 
+import (
+	"log"
+
+	"github.com/jmoiron/sqlx"
+)
+
 const schema = `
 DROP TABLE IF EXISTS course_with_points;
 DROP TABLE IF EXISTS exam;
@@ -92,3 +98,21 @@ INSERT INTO course_with_points(curriculum_id, course_id, curriculum_points) VALU
 INSERT INTO exam(course_id, student_id, points) VALUES 
     ((SELECT id FROM course WHERE name='Math'),(SELECT id FROM student LIMIT 1), 56);
 `
+
+type dbConnection *sqlx.DB
+
+func createDatabaseConnection() (dbConnection, error) {
+	db, err := sqlx.Connect("postgres", "user=test_user dbname=testdb sslmode=disable")
+	if err != nil {
+		return nil, err
+	}
+	log.Println("DB connection successfully")
+
+	db.MustExec(schema)
+	log.Println("DB schema created successfully")
+
+	db.MustExec(addExampleData)
+	log.Println("DB populated with example data")
+
+	return db, nil
+}
