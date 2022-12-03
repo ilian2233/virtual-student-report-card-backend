@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"os"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -102,7 +104,8 @@ INSERT INTO exam(course_id, student_id, points) VALUES
 type dbConnection *sqlx.DB
 
 func createDatabaseConnection() (dbConnection, error) {
-	db, err := sqlx.Connect("postgres", "user=test_user dbname=testdb sslmode=disable")
+	connString := fmt.Sprintf("user=%s dbname=%s sslmode=disable", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
+	db, err := sqlx.Connect("postgres", connString)
 	if err != nil {
 		return nil, err
 	}
