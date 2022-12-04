@@ -148,24 +148,33 @@ func (conn dbConnection) validateUserLogin(email string, password string) bool {
 
 func (conn dbConnection) getUserUUIDByEmail(email string) (string, error) {
 	p := person{}
-	if err := conn.db.Get(&p, "SELECT uuid, email FROM person WHERE email = %s", email); err != nil {
+	if err := conn.db.Get(&p, "SELECT id, email FROM person WHERE email = %s", email); err != nil {
 		return "", err
 	}
 
 	return p.uuid, nil
 }
+
 func (conn dbConnection) getUserRoles(uuid string) (roles []string) {
-	if err := conn.db.Get(nil, "SELECT uuid FROM admin WHERE person_id = %s", uuid); err == nil {
+	if err := conn.db.Get(nil, "SELECT id FROM admin WHERE person_id = %s", uuid); err == nil {
 		roles = append(roles, "Admin")
 	}
 
-	if err := conn.db.Get(nil, "SELECT uuid FROM student WHERE person_id = %s", uuid); err == nil {
+	if err := conn.db.Get(nil, "SELECT id FROM student WHERE person_id = %s", uuid); err == nil {
 		roles = append(roles, "Student")
 	}
 
-	if err := conn.db.Get(nil, "SELECT uuid FROM teacher WHERE person_id = %s", uuid); err == nil {
+	if err := conn.db.Get(nil, "SELECT id FROM teacher WHERE person_id = %s", uuid); err == nil {
 		roles = append(roles, "Teacher")
 	}
 
 	return roles
+}
+
+func (conn dbConnection) getStudentExams(uuid string) (exams []exam, err error) {
+	if err = conn.db.Select(&exams, "SELECT name, points FROM exam JOIN course c on c.id = exam.course_id WHERE student_id = %s", uuid); err == nil {
+		return exams, err
+	}
+
+	return exams, nil
 }

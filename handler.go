@@ -18,12 +18,18 @@ type user struct {
 	password string
 }
 
+type exam struct {
+	name   string
+	points int
+}
+
 type handler struct {
 	secretKet string
 	db        interface {
 		validateUserLogin(email, password string) bool
 		getUserUUIDByEmail(email string) (string, error)
 		getUserRoles(uuid string) []string
+		getStudentExams(uuid string) ([]exam, error)
 	}
 }
 
