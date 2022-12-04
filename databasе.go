@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/jmoiron/sqlx"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const schema = `
@@ -101,13 +102,15 @@ INSERT INTO exam(course_id, student_id, points) VALUES
     ((SELECT id FROM course WHERE name='Math'),(SELECT id FROM student LIMIT 1), 56);
 `
 
-type dbConnection *sqlx.DB
+type dbConnection struct {
+	db *sqlx.DB
+}
 
 func createDatabaseConnection() (dbConnection, error) {
 	connString := fmt.Sprintf("user=%s dbname=%s sslmode=disable", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
 	db, err := sqlx.Connect("postgres", connString)
 	if err != nil {
-		return nil, err
+		return dbConnection{}, err
 	}
 	log.Println("DB connection successfully")
 
@@ -117,5 +120,52 @@ func createDatabaseConnection() (dbConnection, error) {
 	db.MustExec(addExampleData)
 	log.Println("DB populated with example data")
 
-	return db, nil
+	return dbConnection{
+		db: db,
+	}, nil
+}
+
+type person struct {
+	uuid     string
+	email    string
+	password []byte
+}
+
+func (conn dbConnection) validateUserLogin(email string, password string) bool {
+	p := person{}
+	if err := conn.db.Get(&p, "SELECT email, password FROM person WHERE email = %s", email); err != nil {
+		log.Printf("Failed to query db,\n %e", err)
+		return false
+	}
+
+	err := bcrypt.CompareHashAndPassword(p.password, []byte(password))
+	if err != nil {
+		return false
+	}
+
+	return true
+}
+
+func (conn dbConnection) getUserUUIDByEmail(email string) (string, error) {
+	p := person{}
+	if err := conn.db.Get(&p, "SELECT uuid, email FROM person WHERE email = %s", email); err != nil {
+		return "", err
+	}
+
+	return p.uuid, nil
+}
+func (conn dbConnection) getUserRoles(uuid string) (roles []string) {
+	if err := conn.db.Get(nil, "SELECT uuid FROM admin WHERE person_id = %s", uuid); err == nil {
+		roles = append(roles, "Admin")
+	}
+
+	if err := conn.db.Get(nil, "SELECT uuid FROM student WHERE person_id = %s", uuid); err == nil {
+		roles = append(roles, "Student")
+	}
+
+	if err := conn.db.Get(nil, "SELECT uuid FROM teacher WHERE person_id = %s", uuid); err == nil {
+		roles = append(roles, "Teacher")
+	}
+
+	return roles
 }
