@@ -11,7 +11,7 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+		log.Fatalf("Error loading .env file \n%e", err)
 	}
 
 	db, err := createDatabaseConnection()
@@ -24,9 +24,9 @@ func main() {
 		db:        db,
 	}
 
-	//studentHandler := http.NewServeMux()
-	//studentHandler.HandleFunc("/exam")
-	//
+	studentHandler := http.NewServeMux()
+	studentHandler.HandleFunc("/exam", h.getStudentExams)
+
 	//teacherHandler := http.NewServeMux()
 	//teacherHandler.HandleFunc("/exam")
 	//teacherHandler.HandleFunc("/student")
@@ -40,7 +40,7 @@ func main() {
 
 	mainHandler := http.NewServeMux()
 	mainHandler.HandleFunc("/login", h.handleLogin)
-	//mainHandler.Handle("/student", studentHandler)
+	mainHandler.Handle("/student", studentHandler)
 	//mainHandler.Handle("/teacher", teacherHandler)
 	//mainHandler.Handle("/admin", adminHandler)
 	if err = http.ListenAndServe(":8000", mainHandler); err != nil {
