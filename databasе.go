@@ -138,8 +138,8 @@ func (conn dbConnection) validateUserLogin(email string, password string) bool {
 		return false
 	}
 
-	err := bcrypt.CompareHashAndPassword(p.password, []byte(password))
-	if err != nil {
+	if err := bcrypt.CompareHashAndPassword(p.password, []byte(password)); err != nil {
+		log.Printf("Password did not match \n%e", err)
 		return false
 	}
 

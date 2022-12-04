@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -17,7 +18,7 @@ type handler struct {
 	secretKet string
 	db        interface {
 		validateUserLogin(email, password string) bool
-		getUserUUIDByEmail(email string) string
+		getUserUUIDByEmail(email string) (string, error)
 		getUserRoles(uuid string) []string
 	}
 }
@@ -45,7 +46,13 @@ func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	uuid := h.db.getUserUUIDByEmail(u.email)
+	uuid, err := h.db.getUserUUIDByEmail(u.email)
+	if err != nil {
+		log.Printf("Failed extracting uuid by email, \n%e", err)
+		respondWithMessage(w, "Something went wrong", 500)
+		return
+	}
+
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 
@@ -55,6 +62,7 @@ func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	tokenString, err := token.SignedString(h.secretKet)
 	if err != nil {
+		log.Printf("Failed generating token, \n%e", err)
 		respondWithMessage(w, "Something went wrong", 500)
 		return
 	}
