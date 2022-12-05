@@ -40,7 +40,7 @@ func Test_main(t *testing.T) {
 	}{
 		{
 			"Successful auth",
-			httptest.NewRequest("POST", "/login", nil),
+			httptest.NewRequest(http.MethodPost, "/login", nil),
 			&http.Response{
 				StatusCode: 400,
 			},
