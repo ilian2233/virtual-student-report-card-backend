@@ -25,12 +25,11 @@ func main() {
 	}
 
 	studentHandler := http.NewServeMux()
-	studentHandler.HandleFunc("/exam", h.getStudentExams)
+	studentHandler.HandleFunc("/exams", h.getStudentExams)
 
-	//teacherHandler := http.NewServeMux()
-	//teacherHandler.HandleFunc("/exam")
-	//teacherHandler.HandleFunc("/student")
-	//
+	teacherHandler := http.NewServeMux()
+	teacherHandler.HandleFunc("/exams", h.teacherExams)
+
 	//adminHandler := http.NewServeMux()
 	//adminHandler.HandleFunc("/curriculum")
 	//adminHandler.HandleFunc("/course")
@@ -41,7 +40,7 @@ func main() {
 	mainHandler := http.NewServeMux()
 	mainHandler.HandleFunc("/login", h.handleLogin)
 	mainHandler.Handle("/student", studentHandler)
-	//mainHandler.Handle("/teacher", teacherHandler)
+	mainHandler.Handle("/teacher", teacherHandler)
 	//mainHandler.Handle("/admin", adminHandler)
 	if err = http.ListenAndServe(":8000", mainHandler); err != nil {
 		panic(err)
