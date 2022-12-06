@@ -28,7 +28,7 @@ func main() {
 	studentHandler.HandleFunc("/exams", h.getStudentExams)
 
 	teacherHandler := http.NewServeMux()
-	teacherHandler.HandleFunc("/exams", h.teacherExams)
+	teacherHandler.HandleFunc("/exams", h.postTeacherExams)
 
 	//adminHandler := http.NewServeMux()
 	//adminHandler.HandleFunc("/curriculum")

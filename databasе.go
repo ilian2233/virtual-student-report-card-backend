@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -9,7 +10,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const schema = `
+const (
+	schema = `
 DROP TABLE IF EXISTS course_with_points;
 DROP TABLE IF EXISTS exam;
 DROP TABLE IF EXISTS course;
@@ -47,7 +49,7 @@ CREATE TABLE IF NOT EXISTS teacher (
 
 CREATE TABLE IF NOT EXISTS curriculum (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
     required_curriculum_points_to_pass INT DEFAULT 100 CHECK (required_curriculum_points_to_pass > 0)
 );
 
@@ -55,7 +57,7 @@ CREATE TABLE IF NOT EXISTS curriculum (
 CREATE TABLE IF NOT EXISTS course (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     teacher_id UUID REFERENCES teacher(id) NOT NULL,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL UNIQUE,
     number_of_seats INT DEFAULT 50 CHECK (number_of_seats > 0)
 );
 
@@ -74,7 +76,7 @@ CREATE TABLE IF NOT EXISTS exam (
     points INT CHECK (points > 0)
 );`
 
-const addExampleData = `
+	addExampleData = `
 INSERT INTO person(name, phone, email, password) VALUES 
     ('ivan', '0881234563', 'test@test.com', 'test_pas_123'),
     ('ivan1', '0881234564', 'test1@test.com', 'test_pas_123'),
@@ -101,6 +103,7 @@ INSERT INTO course_with_points(curriculum_id, course_id, curriculum_points) VALU
 INSERT INTO exam(course_id, student_id, points) VALUES 
     ((SELECT id FROM course WHERE name='Math'),(SELECT id FROM student LIMIT 1), 56);
 `
+)
 
 type dbConnection struct {
 	db *sqlx.DB
@@ -133,7 +136,7 @@ type person struct {
 
 func (conn dbConnection) validateUserLogin(email string, password string) bool {
 	p := person{}
-	if err := conn.db.Get(&p, "SELECT email, password FROM person WHERE email = %s", email); err != nil {
+	if err := conn.db.Get(&p, "SELECT email, password FROM person WHERE email = $1", email); err != nil {
 		log.Printf("Failed to query db,\n %e", err)
 		return false
 	}
@@ -148,7 +151,7 @@ func (conn dbConnection) validateUserLogin(email string, password string) bool {
 
 func (conn dbConnection) getUserUUIDByEmail(email string) (string, error) {
 	p := person{}
-	if err := conn.db.Get(&p, "SELECT id, email FROM person WHERE email = %s", email); err != nil {
+	if err := conn.db.Get(&p, "SELECT id, email FROM person WHERE email = $1", email); err != nil {
 		return "", err
 	}
 
@@ -156,25 +159,71 @@ func (conn dbConnection) getUserUUIDByEmail(email string) (string, error) {
 }
 
 func (conn dbConnection) getUserRoles(uuid string) (roles []string) {
-	if err := conn.db.Get(nil, "SELECT id FROM admin WHERE person_id = %s", uuid); err == nil {
+	if err := conn.db.Get(nil, "SELECT id FROM admin WHERE person_id = $1", uuid); err == nil {
 		roles = append(roles, "Admin")
 	}
 
-	if err := conn.db.Get(nil, "SELECT id FROM student WHERE person_id = %s", uuid); err == nil {
+	if err := conn.db.Get(nil, "SELECT id FROM student WHERE person_id = $1", uuid); err == nil {
 		roles = append(roles, "Student")
 	}
 
-	if err := conn.db.Get(nil, "SELECT id FROM teacher WHERE person_id = %s", uuid); err == nil {
+	if err := conn.db.Get(nil, "SELECT id FROM teacher WHERE person_id = $1", uuid); err == nil {
 		roles = append(roles, "Teacher")
 	}
 
 	return roles
 }
 
-func (conn dbConnection) getStudentExams(uuid string) (exams []exam, err error) {
-	if err = conn.db.Select(&exams, "SELECT name, points FROM exam JOIN course c on c.id = exam.course_id WHERE student_id = %s", uuid); err == nil {
+func (conn dbConnection) getStudentExams(uuid string) (exams []studentExam, err error) {
+	if err = conn.db.Select(&exams, "SELECT name as courseName, points FROM exam JOIN course c on c.id = exam.course_id WHERE student_id = $1", uuid); err == nil {
 		return exams, err
 	}
 
 	return exams, nil
+}
+
+var errExamNotLedByThisTeacher = errors.New("this teacher is not leading this course")
+
+type course struct {
+	id string
+}
+
+func (conn dbConnection) insertExams(teacherUUID string, exams []teacherExam) (teacherExam, error) {
+	var courses []course
+	if err := conn.db.Select(&courses, "SELECT id FROM course WHERE teacher_id = $1", teacherUUID); err == nil {
+		log.Printf("Failed to get teacher courses")
+		return teacherExam{}, err
+	}
+
+	tx, err := conn.db.Begin()
+	if err != nil {
+		log.Printf("Failed to start transaction")
+		return teacherExam{}, err
+	}
+
+	for _, v := range exams {
+		if !contains(courses, v) {
+			if err = tx.Rollback(); err != nil {
+				fmt.Printf("Failed to rollback transaction")
+				return teacherExam{}, err
+			}
+			return teacherExam{}, errExamNotLedByThisTeacher
+		}
+
+		//TODO: Doc says it can be done with named execs
+		if _, err = tx.Exec("INSERT INTO exam(course_id, student_id, points) VALUES ($1, $2, $3)", v.courseID, v.studentID, v.points); err != nil {
+			return v, nil
+		}
+
+	}
+	return teacherExam{}, nil
+}
+
+func contains(c []course, e teacherExam) bool {
+	for _, s := range c {
+		if s.id == e.courseID {
+			return true
+		}
+	}
+	return false
 }
