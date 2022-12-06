@@ -17,10 +17,15 @@ type user struct {
 	password string
 }
 
-type exam struct {
-	courseName  string
-	studentName string
-	points      int
+type studentExam struct {
+	courseName string
+	points     int
+}
+
+type teacherExam struct {
+	courseID  string
+	studentID string
+	points    int
 }
 
 type handler struct {
@@ -29,7 +34,8 @@ type handler struct {
 		validateUserLogin(email, password string) bool
 		getUserUUIDByEmail(email string) (string, error)
 		getUserRoles(uuid string) []string
-		getStudentExams(uuid string) ([]exam, error)
+		getStudentExams(uuid string) ([]studentExam, error)
+		insertExams(teacherUUID string, exams []teacherExam) (teacherExam, error)
 	}
 }
 
@@ -138,60 +144,6 @@ func (h handler) getStudentExams(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h handler) teacherExams(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		h.getTeacherExams(w, r)
-	case http.MethodPost:
-		h.postTeacherExams(w, r)
-	}
-}
-
-func (h handler) getTeacherExams(w http.ResponseWriter, r *http.Request) {
-
-	id, err := performChecks(http.MethodGet, "Teacher", r)
-
-	switch true {
-	case errors.Is(err, errForbiddenMethod):
-		respondWithMessage(w, "Only GET method is allowed", http.StatusBadRequest)
-		return
-	case errors.Is(err, errValidatingJWT):
-		respondWithMessage(w, "unauthorized", http.StatusForbidden)
-		return
-	case errors.Is(err, errMissingRole):
-		log.Printf("Roles list doesn't contain teacher")
-		respondWithMessage(w, "unauthorized", http.StatusForbidden)
-		return
-	case errors.Is(err, jwt.ErrTokenInvalidClaims):
-		log.Printf("Couldn't parse claims")
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	case errors.Is(err, jwt.ErrTokenInvalidId):
-		log.Printf("Couldn't parse uuid")
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	exams, err := h.db.getTeacherExams(id)
-	if err != nil {
-		log.Printf("Failed to get teacher exams \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := json.Marshal(exams)
-	if err != nil {
-		fmt.Printf("Failed to marshall exams \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if _, err = w.Write(resp); err != nil {
-		fmt.Printf("Failed to write \n%e", err)
-	}
-}
-
 func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
 	id, err := performChecks(http.MethodPost, "Teacher", r)
 
@@ -230,18 +182,30 @@ func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var exams []exam
+	var exams []teacherExam
 	if err = json.Unmarshal(b, &exams); err != nil {
 		log.Printf("Couldn't unmarshall exams")
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	if err = h.db.insertExams(exams); err != nil {
+	failedExam, err := h.db.insertExams(id, exams)
+	var emptyExam teacherExam
+	if failedExam != emptyExam {
+		resp, err := json.Marshal(failedExam)
+		if err != nil {
+			fmt.Printf("Failed to marshall exam \n%e", err)
+			respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		if _, err = w.Write(resp); err != nil {
+			fmt.Printf("Failed to write exams \n%e", err)
+		}
+	} else if err != nil {
 		log.Printf("Exams insert failed with \n%e", err)
-		//TODO: Add indicating of wrong exams
-		//TODO: validate if this teacher is responsible for this course
-		respondWithMessage(w, "some exams failed inserting, please check the exams and try again", http.StatusBadRequest)
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
