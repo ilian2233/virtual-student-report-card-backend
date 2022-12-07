@@ -12,7 +12,6 @@ import (
 
 const (
 	schema = `
-DROP TABLE IF EXISTS course_with_points;
 DROP TABLE IF EXISTS exam;
 DROP TABLE IF EXISTS course;
 DROP TABLE IF EXISTS curriculum;
@@ -57,16 +56,9 @@ CREATE TABLE IF NOT EXISTS curriculum (
 CREATE TABLE IF NOT EXISTS course (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     teacher_id UUID REFERENCES teacher(id) NOT NULL,
+    curriculum_id UUID REFERENCES curriculum(id) NOT NULL,
     name TEXT NOT NULL UNIQUE,
     number_of_seats INT DEFAULT 50 CHECK (number_of_seats > 0)
-);
-
--- Exists because different courses can have different points depending in the curriculum
-CREATE TABLE IF NOT EXISTS course_with_points (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    curriculum_id UUID REFERENCES curriculum(id) NOT NULL,
-    course_id UUID REFERENCES course(id) NOT NULL,
-    curriculum_points INT CHECK (curriculum_points > 0)
 );
 
 CREATE TABLE IF NOT EXISTS exam (
@@ -93,12 +85,9 @@ INSERT INTO teacher(person_id) VALUES
 
 INSERT INTO curriculum(name) VALUES ('SIT'), ('KST');
 
-INSERT INTO course(teacher_id, name) VALUES 
-    ((SELECT id FROM teacher LIMIT 1),'Math'), 
-    ((SELECT id FROM teacher LIMIT 1),'Programming Basics');
-
-INSERT INTO course_with_points(curriculum_id, course_id, curriculum_points) VALUES 
-    ((SELECT id FROM curriculum WHERE name='SIT'),(SELECT id FROM course WHERE name='Math'), 3);
+INSERT INTO course(teacher_id, curriculum_id, name) VALUES 
+    ((SELECT id FROM teacher LIMIT 1), (SELECT id FROM curriculum LIMIT 1), 'Math'), 
+    ((SELECT id FROM teacher LIMIT 1), (SELECT id FROM curriculum LIMIT 1), 'Programming Basics');
 
 INSERT INTO exam(course_id, student_id, points) VALUES 
     ((SELECT id FROM course WHERE name='Math'),(SELECT id FROM student LIMIT 1), 56);
