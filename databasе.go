@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS exam (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_id UUID REFERENCES course(id) NOT NULL,
     student_id UUID REFERENCES student(id) NOT NULL,
-    points INT CHECK (points > 0)
+    points INT CHECK (points > 0),
+  	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );`
 
 	addExampleData = `
