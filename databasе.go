@@ -118,20 +118,14 @@ func createDatabaseConnection() (dbConnection, error) {
 	}, nil
 }
 
-type person struct {
-	uuid     string
-	email    string
-	password []byte
-}
-
-func (conn dbConnection) validateUserLogin(email string, password string) bool {
+func (conn dbConnection) validateUserLogin(email string, password []byte) bool {
 	p := person{}
 	if err := conn.db.Get(&p, "SELECT email, password FROM person WHERE email = $1", email); err != nil {
 		log.Printf("Failed to query db,\n %e", err)
 		return false
 	}
 
-	if err := bcrypt.CompareHashAndPassword(p.password, []byte(password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword(p.password, password); err != nil {
 		log.Printf("Password did not match \n%e", err)
 		return false
 	}

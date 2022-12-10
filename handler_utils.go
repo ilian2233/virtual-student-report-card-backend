@@ -17,8 +17,8 @@ var (
 	errMissingRole     = errors.New("role is not present in token")
 )
 
-func performChecks(method, role string, r *http.Request) (string, error) {
-	if r.Method != method {
+func performChecks(methods []string, role string, r *http.Request) (string, error) {
+	if !isMethodAllowed(methods, r.Method) {
 		return "", errForbiddenMethod
 	}
 
@@ -42,6 +42,15 @@ func performChecks(method, role string, r *http.Request) (string, error) {
 	}
 
 	return id, nil
+}
+
+func isMethodAllowed(methods []string, method string) bool {
+	for _, v := range methods {
+		if v == method {
+			return true
+		}
+	}
+	return false
 }
 
 func respondWithMessage(w http.ResponseWriter, messageTxt string, statusCode int) {
