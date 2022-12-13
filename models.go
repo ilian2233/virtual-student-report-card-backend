@@ -1,19 +1,19 @@
 package main
 
-type student struct {
+type Student struct {
 	id       string
 	name     string
 	phone    string
-	email    string
-	password []byte
+	Email    string
+	Password string
 }
 
-type teacher struct {
+type Teacher struct {
 	id       string
 	name     string
 	phone    string
-	email    string
-	password []byte
+	Email    string
+	Password string
 }
 
 type curriculum struct {

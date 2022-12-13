@@ -27,34 +27,39 @@ type handler struct {
 		insertCourse(course) error
 		updateCourse(course) error
 		getAllExams() ([]exam, error)
-		getAllStudents() ([]student, error)
-		insertStudent(student) error
-		updateStudent(student) error
-		getAllTeachers() ([]teacher, error)
-		insertTeacher(teacher) error
-		updateTeacher(teacher) error
+		getAllStudents() ([]Student, error)
+		insertStudent(Student) error
+		updateStudent(Student) error
+		getAllTeachers() ([]Teacher, error)
+		insertTeacher(Teacher) error
+		updateTeacher(Teacher) error
 	}
 }
 
 func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+
+	type User struct {
+		Email    string
+		Password string
+	}
 
 	if r.Method != http.MethodPost {
 		respondWithMessage(w, "Only POST method is allowed", http.StatusBadRequest)
 		return
 	}
 
-	var u student
+	var u User
 	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 		respondWithMessage(w, "Invalid body", http.StatusBadRequest)
 		return
 	}
 
-	if u.email == "" || string(u.password) == "" {
+	if u.Email == "" || u.Password == "" {
 		respondWithMessage(w, "Email or password is empty", http.StatusForbidden)
 		return
 	}
 
-	if !h.db.validateUserLogin(u.email, u.password) {
+	if !h.db.validateUserLogin(u.Email, []byte(u.Password)) {
 		respondWithMessage(w, "Incorrect email or password", http.StatusForbidden)
 		return
 	}
@@ -62,10 +67,10 @@ func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
 
-	claims["roles"] = h.db.getUserRoles(u.email)
-	claims["exp"] = time.Now().Add(time.Minute * 30).Unix()
+	claims["roles"] = h.db.getUserRoles(u.Email)
+	claims["exp"] = time.Now().Add(time.Minute * 43830).Unix()
 
-	tokenString, err := token.SignedString(h.secretKet)
+	tokenString, err := token.SignedString([]byte(h.secretKet))
 	if err != nil {
 		log.Printf("Failed generating token, \n%e", err)
 		respondWithMessage(w, "Something went wrong", http.StatusInternalServerError)
@@ -518,7 +523,7 @@ func (h handler) upsertStudents(w http.ResponseWriter, r *http.Request, insert b
 		return
 	}
 
-	var s student
+	var s Student
 	if err = json.Unmarshal(b, &s); err != nil {
 		log.Printf("Couldn't unmarshall students")
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
@@ -612,7 +617,7 @@ func (h handler) upsertTeachers(w http.ResponseWriter, r *http.Request, insert b
 		return
 	}
 
-	var t teacher
+	var t Teacher
 	if err = json.Unmarshal(b, &t); err != nil {
 		log.Printf("Couldn't unmarshall teachers")
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)

@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/jmoiron/sqlx"
-	"golang.org/x/crypto/bcrypt"
 )
 
 //TODO: Update teacher and student insert and update strategies
@@ -123,14 +122,19 @@ func createDatabaseConnection() (dbConnection, error) {
 }
 
 func (conn dbConnection) validateUserLogin(email string, password []byte) bool {
-	p := student{}
+	var p Student
 	if err := conn.db.Get(&p, "SELECT email, password FROM person WHERE email=$1", email); err != nil {
 		log.Printf("Failed to query db,\n %e", err)
 		return false
 	}
 
-	if err := bcrypt.CompareHashAndPassword(p.password, password); err != nil {
-		log.Printf("Password did not match \n%e", err)
+	//TODO: Uncomment when passwords are heshed
+	//if err := bcrypt.CompareHashAndPassword([]byte(p.Password), password); err != nil {
+	//	log.Printf("Password did not match \n%e", err)
+	//	return false
+	//}
+	if p.Password != string(password) {
+		log.Printf("Password did not match")
 		return false
 	}
 
@@ -227,7 +231,7 @@ func (conn dbConnection) getAllExams() (exams []exam, err error) {
 	return exams, nil
 }
 
-func (conn dbConnection) getAllStudents() (students []student, err error) {
+func (conn dbConnection) getAllStudents() (students []Student, err error) {
 	if err = conn.db.Select(&students, "SELECT id, person_id as personID FROM student"); err == nil {
 		log.Printf("Failed to get students")
 		return nil, err
@@ -235,7 +239,7 @@ func (conn dbConnection) getAllStudents() (students []student, err error) {
 	return students, nil
 }
 
-func (conn dbConnection) insertStudent(s student) error {
+func (conn dbConnection) insertStudent(s Student) error {
 	tx, err := conn.db.Begin()
 
 	defer func(tx *sql.Tx) {
@@ -250,7 +254,7 @@ func (conn dbConnection) insertStudent(s student) error {
 		return err
 	}
 
-	if _, err = tx.Exec("INSERT INTO student(person_id) VALUES ($1)", s.email); err != nil {
+	if _, err = tx.Exec("INSERT INTO student(person_id) VALUES ($1)", s.Email); err != nil {
 		return err
 	}
 
@@ -261,7 +265,7 @@ func (conn dbConnection) insertStudent(s student) error {
 	return nil
 }
 
-func (conn dbConnection) updateStudent(s student) error {
+func (conn dbConnection) updateStudent(s Student) error {
 	tx, err := conn.db.Begin()
 
 	defer func(tx *sql.Tx) {
@@ -276,7 +280,7 @@ func (conn dbConnection) updateStudent(s student) error {
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE student SET person_id=$1 WHERE id=$2", s.email, s.id); err != nil {
+	if _, err = tx.Exec("UPDATE student SET person_id=$1 WHERE id=$2", s.Email, s.id); err != nil {
 		return err
 	}
 
@@ -287,7 +291,7 @@ func (conn dbConnection) updateStudent(s student) error {
 	return nil
 }
 
-func (conn dbConnection) getAllTeachers() (teachers []teacher, err error) {
+func (conn dbConnection) getAllTeachers() (teachers []Teacher, err error) {
 	if err = conn.db.Select(&teachers, "SELECT id, person_id as personID FROM teacher"); err == nil {
 		log.Printf("Failed to get teachers")
 		return nil, err
@@ -295,7 +299,7 @@ func (conn dbConnection) getAllTeachers() (teachers []teacher, err error) {
 	return teachers, nil
 }
 
-func (conn dbConnection) insertTeacher(t teacher) error {
+func (conn dbConnection) insertTeacher(t Teacher) error {
 	tx, err := conn.db.Begin()
 
 	defer func(tx *sql.Tx) {
@@ -306,11 +310,11 @@ func (conn dbConnection) insertTeacher(t teacher) error {
 		return err
 	}
 
-	if err = insertPerson(tx, student(t)); err != nil {
+	if err = insertPerson(tx, Student(t)); err != nil {
 		return err
 	}
 
-	if _, err = tx.Exec("INSERT INTO teacher(person_id) VALUES ($1)", t.email); err != nil {
+	if _, err = tx.Exec("INSERT INTO teacher(person_id) VALUES ($1)", t.Email); err != nil {
 		return err
 	}
 
@@ -321,7 +325,7 @@ func (conn dbConnection) insertTeacher(t teacher) error {
 	return nil
 }
 
-func (conn dbConnection) updateTeacher(t teacher) error {
+func (conn dbConnection) updateTeacher(t Teacher) error {
 	tx, err := conn.db.Begin()
 
 	defer func(tx *sql.Tx) {
@@ -332,11 +336,11 @@ func (conn dbConnection) updateTeacher(t teacher) error {
 		return err
 	}
 
-	if err = insertPerson(tx, student(t)); err != nil {
+	if err = insertPerson(tx, Student(t)); err != nil {
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE teacher SET person_id=$1 WHERE id=$2", t.email, t.id); err != nil {
+	if _, err = tx.Exec("UPDATE teacher SET person_id=$1 WHERE id=$2", t.Email, t.id); err != nil {
 		return err
 	}
 
@@ -355,12 +359,12 @@ func (conn dbConnection) delete(table, uuid string) error {
 	return nil
 }
 
-func insertPerson(tx *sql.Tx, s student) error {
+func insertPerson(tx *sql.Tx, s Student) error {
 	//TODO: Hash Password
 	//TODO: Add salt
-	hashedPassword := s.password
+	hashedPassword := s.Password
 
-	if _, err := tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.name, s.email, s.phone, hashedPassword); err != nil {
+	if _, err := tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.name, s.Email, s.phone, hashedPassword); err != nil {
 		return err
 	}
 	return nil

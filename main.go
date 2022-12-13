@@ -42,7 +42,7 @@ func main() {
 	mainHandler.Handle("/student", studentHandler)
 	mainHandler.Handle("/teacher", teacherHandler)
 	mainHandler.Handle("/admin", adminHandler)
-	if err = http.ListenAndServe(":8000", mainHandler); err != nil {
+	if err = http.ListenAndServe(":8080", mainHandler); err != nil {
 		panic(err)
 	}
 
