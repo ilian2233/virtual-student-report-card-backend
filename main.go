@@ -20,8 +20,8 @@ func main() {
 	}
 
 	h := handler{
-		secretKet: os.Getenv("SECRET_KEY"),
-		db:        db,
+		os.Getenv("SECRET_KEY"),
+		db,
 	}
 
 	studentHandler := http.NewServeMux()
