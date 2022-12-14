@@ -37,8 +37,9 @@ type exam struct {
 	points    int
 }
 
-type studentExam struct {
-	id         string
-	courseName string
-	points     int
+type StudentExam struct {
+	Id          string
+	StudentName string
+	CourseName  string
+	Points      int
 }

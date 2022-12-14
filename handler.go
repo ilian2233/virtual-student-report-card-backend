@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -16,8 +17,8 @@ type handler struct {
 	secretKet string
 	db        interface {
 		validateUserLogin(email string, password []byte) bool
-		getUserRoles(uuid string) []string
-		getStudentExams(uuid string) ([]studentExam, error)
+		getUserRoles(email string) []string
+		getStudentExams(email string) ([]StudentExam, error)
 		insertExam(teacherUUID string, e exam) error
 		getAllCurriculums() ([]curriculum, error)
 		insertCurriculum(curriculum) error
@@ -34,6 +35,25 @@ type handler struct {
 		insertTeacher(Teacher) error
 		updateTeacher(Teacher) error
 	}
+}
+
+func setupHandler(db dbConnection) *http.ServeMux {
+	h := handler{
+		secretKet: os.Getenv("SECRET_KEY"),
+		db:        db,
+	}
+
+	mainHandler := http.NewServeMux()
+	mainHandler.HandleFunc("/login", corsHandler(h.handleLogin))
+	mainHandler.HandleFunc("/student/exams", corsHandler(h.getStudentExams))
+	mainHandler.HandleFunc("/teacher/exams", corsHandler(h.postTeacherExams))
+	mainHandler.HandleFunc("/admin/curriculums", corsHandler(h.curriculums))
+	mainHandler.HandleFunc("/admin/courses", corsHandler(h.courses))
+	mainHandler.HandleFunc("/admin/exams", corsHandler(h.getExams))
+	mainHandler.HandleFunc("/admin/students", corsHandler(h.students))
+	mainHandler.HandleFunc("/admin/teachers", corsHandler(h.teachers))
+
+	return mainHandler
 }
 
 func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +88,7 @@ func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	claims := token.Claims.(jwt.MapClaims)
 
 	claims["roles"] = h.db.getUserRoles(u.Email)
+	claims["email"] = u.Email
 	claims["exp"] = time.Now().Add(time.Minute * 43830).Unix()
 
 	tokenString, err := token.SignedString([]byte(h.secretKet))
@@ -82,9 +103,9 @@ func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
-type roles []string
+type Roles []interface{}
 
-func (r roles) contains(s string) bool {
+func (r Roles) contains(s string) bool {
 	for _, v := range r {
 		if v == s {
 			return true
@@ -94,7 +115,7 @@ func (r roles) contains(s string) bool {
 }
 
 func (h handler) getStudentExams(w http.ResponseWriter, r *http.Request) {
-	id, err := performChecks([]string{http.MethodGet}, "Student", r)
+	email, err := performChecks([]string{http.MethodGet}, "Student", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -117,7 +138,7 @@ func (h handler) getStudentExams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exams, err := h.db.getStudentExams(id)
+	exams, err := h.db.getStudentExams(email)
 	if err != nil {
 		log.Printf("Failed to get student exams \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
@@ -138,7 +159,7 @@ func (h handler) getStudentExams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
-	id, err := performChecks([]string{http.MethodPost}, "Teacher", r)
+	email, err := performChecks([]string{http.MethodPost}, "Teacher", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -182,7 +203,7 @@ func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = h.db.insertExam(id, e); err != nil {
+	if err = h.db.insertExam(email, e); err != nil {
 		log.Printf("Exams insert failed with \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
