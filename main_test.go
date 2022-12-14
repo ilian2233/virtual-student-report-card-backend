@@ -13,48 +13,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func Test_login(t *testing.T) {
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error loading .env file \n%e", err)
-	}
-
-	db, err := createDatabaseConnection()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	h := setupHandler(db)
-
-	tests := []struct {
-		name               string
-		req                *http.Request
-		expectedStatusCode int
-	}{
-		{
-			"Unsuccessful auth",
-			httptest.NewRequest(http.MethodPost, "/login", nil),
-			http.StatusBadRequest,
-		},
-		{
-			"Successful auth",
-			httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(`{ "Email":"test@test.com", "Password": "test_pas_123"}`)),
-			http.StatusOK,
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			respRec := httptest.NewRecorder()
-
-			h.ServeHTTP(respRec, test.req)
-
-			if respRec.Result().StatusCode != test.expectedStatusCode {
-				t.Fatalf("Expected response %d, but got %d", test.expectedStatusCode, respRec.Result().StatusCode)
-			}
-		})
-	}
-}
-
-func Test_exams(t *testing.T) {
+func Test_main(t *testing.T) {
 	if err := godotenv.Load(); err != nil {
 		log.Fatalf("Error loading .env file \n%e", err)
 	}
@@ -73,6 +32,18 @@ func Test_exams(t *testing.T) {
 		expectedBody       []byte
 	}{
 		{
+			"Unsuccessful auth",
+			httptest.NewRequest(http.MethodPost, "/login", nil),
+			http.StatusBadRequest,
+			[]byte(`{"message":"Invalid body"}`),
+		},
+		{
+			"Successful auth",
+			httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(`{ "Email":"test@test.com", "Password": "test_pas_123"}`)),
+			http.StatusOK,
+			[]byte(``),
+		},
+		{
 			"Get student exams without auth",
 			httptest.NewRequest(http.MethodGet, "/student/exams", nil),
 			http.StatusForbidden,
@@ -82,7 +53,49 @@ func Test_exams(t *testing.T) {
 			"Get student exams",
 			requestWithAuth(http.MethodGet, "/student/exams", nil, "student"),
 			http.StatusOK,
-			[]byte(`[{"Id":"f83f29bb-ab1c-4b99-9297-75ca1afaaee1","StudentName":"ivan1","CourseName":"Math","Points":56}]`),
+			[]byte(`[{"StudentName":"ivan1","CourseName":"Math","Points":56}]`),
+		},
+		{
+			"Unauthorised access teacher",
+			requestWithAuth(http.MethodGet, "/teacher/courses", nil, "student"),
+			http.StatusForbidden,
+			[]byte(`{"message":"unauthorized"}`),
+		},
+		{
+			"Unauthorised access teacher",
+			requestWithAuth(http.MethodGet, "/teacher/students", nil, "student"),
+			http.StatusForbidden,
+			[]byte(`{"message":"unauthorized"}`),
+		},
+		{
+			"Get teacher courses",
+			requestWithAuth(http.MethodGet, "/teacher/courses", nil, "teacher"),
+			http.StatusOK,
+			[]byte(`["Math","Programming Basics"]`),
+		},
+		{
+			"Get teacher students",
+			requestWithAuth(http.MethodGet, "/teacher/students", nil, "teacher"),
+			http.StatusOK,
+			[]byte(`["test1@test.com"]`),
+		},
+		{
+			"Post exam with empty body",
+			requestWithAuth(http.MethodPost, "/teacher/exams", nil, "teacher"),
+			http.StatusBadRequest,
+			[]byte(`{"message":"content must be provided in request body"}`),
+		},
+		{
+			"Post exam success",
+			requestWithAuth(http.MethodPost, "/teacher/exams", strings.NewReader(`{ "StudentEmail":"test1@test.com", "CourseName": "Math", "Points": 42}`), "teacher"),
+			http.StatusOK,
+			[]byte(`{"message":"success"}`),
+		},
+		{
+			"Post exam success1",
+			requestWithAuth(http.MethodPost, "/teacher/exams", strings.NewReader(`{"CourseName":"Math","StudentEmail":"test1@test.com","Points":34}`), "teacher"),
+			http.StatusOK,
+			[]byte(`{"message":"success"}`),
 		},
 	}
 	for _, test := range tests {

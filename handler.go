@@ -19,14 +19,13 @@ type handler struct {
 		validateUserLogin(email string, password []byte) bool
 		getUserRoles(email string) []string
 		getStudentExams(email string) ([]StudentExam, error)
-		insertExam(teacherUUID string, e exam) error
-		getAllCurriculums() ([]curriculum, error)
-		insertCurriculum(curriculum) error
-		updateCurriculum(curriculum) error
+		insertExam(email string, e InputExam) error
+		getTeacherCourseNames(email string) ([]string, error)
+		getStudentEmails() ([]string, error)
 		delete(table, uuid string) error
-		getAllCourses() ([]course, error)
-		insertCourse(course) error
-		updateCourse(course) error
+		getAllCourses() ([]Course, error)
+		insertCourse(Course) error
+		updateCourse(Course) error
 		getAllExams() ([]exam, error)
 		getAllStudents() ([]Student, error)
 		insertStudent(Student) error
@@ -47,7 +46,8 @@ func setupHandler(db dbConnection) *http.ServeMux {
 	mainHandler.HandleFunc("/login", corsHandler(h.handleLogin))
 	mainHandler.HandleFunc("/student/exams", corsHandler(h.getStudentExams))
 	mainHandler.HandleFunc("/teacher/exams", corsHandler(h.postTeacherExams))
-	mainHandler.HandleFunc("/admin/curriculums", corsHandler(h.curriculums))
+	mainHandler.HandleFunc("/teacher/courses", corsHandler(h.getTeacherCourses))
+	mainHandler.HandleFunc("/teacher/students", corsHandler(h.getStudentEmails))
 	mainHandler.HandleFunc("/admin/courses", corsHandler(h.courses))
 	mainHandler.HandleFunc("/admin/exams", corsHandler(h.getExams))
 	mainHandler.HandleFunc("/admin/students", corsHandler(h.students))
@@ -196,7 +196,7 @@ func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var e exam
+	var e InputExam
 	if err = json.Unmarshal(b, &e); err != nil {
 		log.Printf("Couldn't unmarshall exams")
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
@@ -212,18 +212,18 @@ func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
 	respondWithMessage(w, "success", http.StatusOK)
 }
 
-func (h handler) curriculums(w http.ResponseWriter, r *http.Request) {
-	_, err := performChecks([]string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete}, "Admin", r)
+func (h handler) getTeacherCourses(w http.ResponseWriter, r *http.Request) {
+	email, err := performChecks([]string{http.MethodGet}, "Teacher", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
-		respondWithMessage(w, "Only GET,POST,PATCH and DELETE methods are allowed", http.StatusBadRequest)
+		respondWithMessage(w, "Only POST method is allowed", http.StatusBadRequest)
 		return
 	case errors.Is(err, errValidatingJWT):
 		respondWithMessage(w, "unauthorized", http.StatusForbidden)
 		return
 	case errors.Is(err, errMissingRole):
-		log.Printf("Roles list doesn't contain admin")
+		log.Printf("Roles list doesn't contain teacher")
 		respondWithMessage(w, "unauthorized", http.StatusForbidden)
 		return
 	case errors.Is(err, jwt.ErrTokenInvalidClaims):
@@ -236,88 +236,69 @@ func (h handler) curriculums(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch r.Method {
-	case http.MethodGet:
-		h.getCurriculums(w)
-	case http.MethodPost:
-		h.upsertCurriculums(w, r, true)
-	case http.MethodPatch:
-		h.upsertCurriculums(w, r, false)
-	case http.MethodDelete:
-		h.deleteCurriculum(w, r)
-	default:
-		respondWithMessage(w, "method not allowed", 400)
-	}
-}
-
-func (h handler) getCurriculums(w http.ResponseWriter) {
-	curriculums, err := h.db.getAllCurriculums()
+	courses, err := h.db.getTeacherCourseNames(email)
 	if err != nil {
-		log.Printf("Failed to get student exams \n%e", err)
+		log.Printf("Failed to get student courses \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	resp, err := json.Marshal(curriculums)
+	resp, err := json.Marshal(courses)
 	if err != nil {
-		fmt.Printf("Failed to marshall exams \n%e", err)
+		fmt.Printf("Failed to marshall courses \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if _, err = w.Write(resp); err != nil {
-		fmt.Printf("Failed to write exams \n%e", err)
+		fmt.Printf("Failed to write courses \n%e", err)
 	}
 }
 
-func (h handler) upsertCurriculums(w http.ResponseWriter, r *http.Request, insert bool) {
-	b, err := io.ReadAll(r.Body)
+func (h handler) getStudentEmails(w http.ResponseWriter, r *http.Request) {
+	_, err := performChecks([]string{http.MethodGet}, "Teacher", r)
+
+	switch true {
+	case errors.Is(err, errForbiddenMethod):
+		respondWithMessage(w, "Only POST method is allowed", http.StatusBadRequest)
+		return
+	case errors.Is(err, errValidatingJWT):
+		respondWithMessage(w, "unauthorized", http.StatusForbidden)
+		return
+	case errors.Is(err, errMissingRole):
+		log.Printf("Roles list doesn't contain teacher")
+		respondWithMessage(w, "unauthorized", http.StatusForbidden)
+		return
+	case errors.Is(err, jwt.ErrTokenInvalidClaims):
+		log.Printf("Couldn't parse claims")
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	case errors.Is(err, jwt.ErrTokenInvalidId):
+		log.Printf("Couldn't parse uuid")
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	courses, err := h.db.getStudentEmails()
 	if err != nil {
-		msg := "failed to read request body"
-		log.Printf(msg)
-		respondWithMessage(w, msg, http.StatusBadRequest)
-		return
-	}
-
-	if len(b) == 0 {
-		log.Printf("request body must not be empty")
-		respondWithMessage(w, "content must be provided in request body", http.StatusBadRequest)
-		return
-	}
-
-	var c curriculum
-	if err = json.Unmarshal(b, &c); err != nil {
-		log.Printf("Couldn't unmarshall curriculums")
+		log.Printf("Failed to get student courses \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	if insert {
-		err = h.db.insertCurriculum(c)
-	} else {
-		err = h.db.updateCurriculum(c)
-	}
-
+	resp, err := json.Marshal(courses)
 	if err != nil {
-		log.Printf("Curriculum insert failed with \n%e", err)
+		fmt.Printf("Failed to marshall courses \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	respondWithMessage(w, "success", http.StatusOK)
-}
-
-func (h handler) deleteCurriculum(w http.ResponseWriter, r *http.Request) {
-	curriculumID := r.URL.Query().Get("id")
-
-	if err := h.db.delete("curriculum", curriculumID); err != nil {
-		log.Printf("Curriculum delete failed with \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
+	w.Header().Set("Content-Type", "application/json")
+	if _, err = w.Write(resp); err != nil {
+		fmt.Printf("Failed to write courses \n%e", err)
 	}
 
-	respondWithMessage(w, "success", http.StatusOK)
 }
 
 func (h handler) courses(w http.ResponseWriter, r *http.Request) {
@@ -394,7 +375,7 @@ func (h handler) upsertCourses(w http.ResponseWriter, r *http.Request, insert bo
 		return
 	}
 
-	var c course
+	var c Course
 	if err = json.Unmarshal(b, &c); err != nil {
 		log.Printf("Couldn't unmarshall courses")
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
@@ -509,6 +490,7 @@ func (h handler) students(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) getStudents(w http.ResponseWriter) {
+
 	students, err := h.db.getAllStudents()
 	if err != nil {
 		log.Printf("Failed to get students \n%e", err)
