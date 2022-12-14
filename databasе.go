@@ -15,7 +15,6 @@ const (
 	dropTables = `
 DROP TABLE IF EXISTS exam;
 DROP TABLE IF EXISTS course;
-DROP TABLE IF EXISTS curriculum;
 DROP TABLE IF EXISTS admin;
 DROP TABLE IF EXISTS student;
 DROP TABLE IF EXISTS teacher;
@@ -46,18 +45,10 @@ CREATE TABLE IF NOT EXISTS teacher (
     active BOOLEAN DEFAULT TRUE
 );
 
-CREATE TABLE IF NOT EXISTS curriculum (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL UNIQUE,
-    required_curriculum_points_to_pass INT DEFAULT 100 CHECK (required_curriculum_points_to_pass > 0),
-    deleted BOOL DEFAULT FALSE
-);
-
 -- Given subject of study e.g. math
 CREATE TABLE IF NOT EXISTS course (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     teacher_id UUID REFERENCES teacher(id) NOT NULL,
-    curriculum_id UUID REFERENCES curriculum(id) NOT NULL,
     name TEXT NOT NULL UNIQUE,
     number_of_seats INT DEFAULT 50 CHECK (number_of_seats > 0),
     deleted BOOL DEFAULT FALSE
@@ -87,11 +78,9 @@ INSERT INTO student(person_id) VALUES
 INSERT INTO teacher(person_id) VALUES 
     ((SELECT email FROM person WHERE name='ivan2'));
 
-INSERT INTO curriculum(name) VALUES ('SIT'), ('KST');
-
-INSERT INTO course(teacher_id, curriculum_id, name) VALUES 
-    ((SELECT id FROM teacher LIMIT 1), (SELECT id FROM curriculum LIMIT 1), 'Math'), 
-    ((SELECT id FROM teacher LIMIT 1), (SELECT id FROM curriculum LIMIT 1), 'Programming Basics');
+INSERT INTO course(teacher_id, name) VALUES 
+    ((SELECT id FROM teacher LIMIT 1), 'Math'), 
+    ((SELECT id FROM teacher LIMIT 1), 'Programming Basics');
 
 INSERT INTO exam(course_id, student_id, points) VALUES 
     ((SELECT id FROM course WHERE name='Math'),(SELECT id FROM student LIMIT 1), 56);
@@ -110,14 +99,14 @@ func createDatabaseConnection() (dbConnection, error) {
 	}
 	log.Println("DB connection successfully")
 
-	//db.MustExec(dropTables)
-	//log.Println("DB drop old tables")
+	db.MustExec(dropTables)
+	log.Println("DB drop old tables")
 
 	db.MustExec(schema)
 	log.Println("DB schema created successfully")
 
-	//db.MustExec(addExampleData)
-	//log.Println("DB populated with example data")
+	db.MustExec(addExampleData)
+	log.Println("DB populated with example data")
 
 	return dbConnection{
 		db: db,
@@ -167,7 +156,7 @@ func (conn dbConnection) getStudentExams(studentEmail string) (exams []StudentEx
 		return exams, err
 	}
 
-	if err = conn.db.Select(&exams, "SELECT e.id, p.name as StudentName, c.name as CourseName, points FROM exam e JOIN course c ON c.id = e.course_id JOIN student s ON s.id = e.student_id JOIN person p ON p.email = s.person_id WHERE student_id=$1 AND c.deleted=FALSE", id); err != nil {
+	if err = conn.db.Select(&exams, "SELECT p.name as StudentName, c.name as CourseName, points FROM exam e JOIN course c ON c.id = e.course_id JOIN student s ON s.id = e.student_id JOIN person p ON p.email = s.person_id WHERE student_id=$1 AND c.deleted=FALSE", id); err != nil {
 		return exams, err
 	}
 	return exams, nil
@@ -180,60 +169,110 @@ func (conn dbConnection) getStudentIdFromEmail(email string) (id string, err err
 	return id, nil
 }
 
-func (conn dbConnection) insertExam(teacherUUID string, e exam) error {
-	var courses []course
-	if err := conn.db.Select(&courses, "SELECT id FROM course WHERE teacher_id=$1 AND deleted=FALSE", teacherUUID); err != nil {
-		log.Printf("Failed to get teacher courses")
+func (conn dbConnection) insertExam(email string, e InputExam) error {
+	courses, err := conn.getTeacherCourses(email)
+	if err != nil {
 		return err
 	}
 
-	//TODO: Check if teacher leads exam
+	if !courseList(courses).contains(e.CourseName) {
+		return fmt.Errorf("course not led by that teacher")
+	}
 
-	if _, err := conn.db.Exec("INSERT INTO exam(course_id, student_id, points) VALUES ($1, $2, $3)", e.courseID, e.studentID, e.points); err != nil {
+	var courseID string
+	if err = conn.db.Get(&courseID, "SELECT id FROM course WHERE name = $1", e.CourseName); err != nil {
+		return err
+	}
+
+	var studentID string
+	if err = conn.db.Get(&studentID, "SELECT id FROM student WHERE person_id = $1", e.StudentEmail); err != nil {
+		return err
+	}
+
+	if _, err = conn.db.Exec("INSERT INTO exam(course_id, student_id, points) VALUES ($1, $2, $3)", courseID, studentID, e.Points); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (conn dbConnection) getAllCurriculums() (curriculums []curriculum, err error) {
-	if err = conn.db.Select(&curriculums, "SELECT id, name, required_curriculum_points_to_pass as requiredPoints FROM curriculum WHERE deleted=FALSE"); err != nil {
-		log.Printf("Failed to get curriculums")
+type courseList []Course
+
+func (c courseList) contains(name string) bool {
+	for _, v := range c {
+		if v.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (conn dbConnection) getTeacherCourses(email string) ([]Course, error) {
+	id, err := conn.getTeacherIdFromEmail(email)
+	if err != nil {
 		return nil, err
 	}
-	return curriculums, nil
-}
 
-func (conn dbConnection) insertCurriculum(c curriculum) error {
-	if _, err := conn.db.Exec("INSERT INTO curriculum(name, required_curriculum_points_to_pass) VALUES ($1, $2)", c.name, c.requiredPoints); err != nil {
-		return err
+	var courses []Course
+	if err = conn.db.Select(&courses, "SELECT id, teacher_id as TeacherId, name, number_of_seats as NumberOfSeats FROM course WHERE teacher_id = $1 AND deleted=FALSE", id); err != nil {
+		log.Printf("Failed to get teacher courses")
+		return nil, err
 	}
-	return nil
+
+	return courses, nil
 }
 
-func (conn dbConnection) updateCurriculum(c curriculum) error {
-	if _, err := conn.db.Exec("UPDATE curriculum SET name=$1, required_curriculum_points_to_pass=$2 WHERE id=$3", c.name, c.requiredPoints, c.id); err != nil {
-		return err
+func (conn dbConnection) getTeacherCourseNames(email string) ([]string, error) {
+	courses, err := conn.getTeacherCourses(email)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+
+	var result []string
+	for _, v := range courses {
+		result = append(result, v.Name)
+	}
+
+	return result, nil
 }
 
-func (conn dbConnection) getAllCourses() (courses []course, err error) {
-	if err = conn.db.Select(&courses, "SELECT id, teacher_id as teacherId, curriculum_id as curriculumId, name, number_of_seats as numberOfSeats FROM course WHERE deleted=FALSE"); err != nil {
+func (conn dbConnection) getStudentEmails() ([]string, error) {
+	students, err := conn.getAllStudents()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []string
+	for _, v := range students {
+		result = append(result, v.Email)
+	}
+
+	return result, nil
+}
+
+func (conn dbConnection) getTeacherIdFromEmail(email string) (id string, err error) {
+	if err = conn.db.Get(&id, "SELECT id FROM teacher WHERE person_id=$1", email); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (conn dbConnection) getAllCourses() (courses []Course, err error) {
+	if err = conn.db.Select(&courses, "SELECT id, teacher_id as TeacherId, curriculum_id as CurriculumId, name, number_of_seats as NumberOfSeats FROM course WHERE deleted=FALSE"); err != nil {
 		log.Printf("Failed to get courses")
 		return nil, err
 	}
 	return courses, nil
 }
 
-func (conn dbConnection) insertCourse(c course) error {
-	if _, err := conn.db.Exec("INSERT INTO course(teacher_id, curriculum_id, name, number_of_seats) VALUES ($1, $2, $3, $4)", c.teacherId, c.curriculumId, c.name, c.numberOfSeats); err != nil {
+func (conn dbConnection) insertCourse(c Course) error {
+	if _, err := conn.db.Exec("INSERT INTO course(teacher_id, name, number_of_seats) VALUES ($1, $2, $3)", c.TeacherId, c.Name, c.NumberOfSeats); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (conn dbConnection) updateCourse(c course) error {
-	if _, err := conn.db.Exec("UPDATE course SET teacher_id=$1, curriculum_id=$2, name=$3, number_of_seats=$4 WHERE id=$5", c.teacherId, c.curriculumId, c.name, c.numberOfSeats, c.id); err != nil {
+func (conn dbConnection) updateCourse(c Course) error {
+	if _, err := conn.db.Exec("UPDATE course SET teacher_id=$1, name=$2, number_of_seats=$3 WHERE id=$4", c.TeacherId, c.Name, c.NumberOfSeats, c.Id); err != nil {
 		return err
 	}
 	return nil
@@ -248,7 +287,7 @@ func (conn dbConnection) getAllExams() (exams []exam, err error) {
 }
 
 func (conn dbConnection) getAllStudents() (students []Student, err error) {
-	if err = conn.db.Select(&students, "SELECT id, person_id as personID FROM student"); err != nil {
+	if err = conn.db.Select(&students, "SELECT id as Id, name as Name, phone as Phone, email as Email FROM student JOIN person p on p.email = student.person_id"); err != nil {
 		log.Printf("Failed to get students")
 		return nil, err
 	}
@@ -296,7 +335,7 @@ func (conn dbConnection) updateStudent(s Student) error {
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE student SET person_id=$1 WHERE id=$2", s.Email, s.id); err != nil {
+	if _, err = tx.Exec("UPDATE student SET person_id=$1 WHERE id=$2", s.Email, s.Id); err != nil {
 		return err
 	}
 
@@ -356,7 +395,7 @@ func (conn dbConnection) updateTeacher(t Teacher) error {
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE teacher SET person_id=$1 WHERE id=$2", t.Email, t.id); err != nil {
+	if _, err = tx.Exec("UPDATE teacher SET person_id=$1 WHERE id=$2", t.Email, t.Id); err != nil {
 		return err
 	}
 
@@ -380,7 +419,7 @@ func insertPerson(tx *sql.Tx, s Student) error {
 	//TODO: Add salt
 	hashedPassword := s.Password
 
-	if _, err := tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.name, s.Email, s.phone, hashedPassword); err != nil {
+	if _, err := tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.Name, s.Email, s.Phone, hashedPassword); err != nil {
 		return err
 	}
 	return nil
