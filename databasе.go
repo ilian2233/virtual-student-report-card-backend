@@ -7,22 +7,21 @@ import (
 	"os"
 
 	"github.com/jmoiron/sqlx"
-	"golang.org/x/crypto/bcrypt"
 )
 
 //TODO: Update teacher and student insert and update strategies
 
 const (
-	schema = `
+	dropTables = `
 DROP TABLE IF EXISTS exam;
 DROP TABLE IF EXISTS course;
 DROP TABLE IF EXISTS curriculum;
 DROP TABLE IF EXISTS admin;
 DROP TABLE IF EXISTS student;
 DROP TABLE IF EXISTS teacher;
-DROP TABLE IF EXISTS person;
--- Temporary while working on the query
+DROP TABLE IF EXISTS person;`
 
+	schema = `
 CREATE TABLE IF NOT EXISTS person (
     email TEXT NOT NULL PRIMARY KEY UNIQUE CHECK (email ~ '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
     name TEXT NOT NULL,
@@ -111,11 +110,14 @@ func createDatabaseConnection() (dbConnection, error) {
 	}
 	log.Println("DB connection successfully")
 
+	//db.MustExec(dropTables)
+	//log.Println("DB drop old tables")
+
 	db.MustExec(schema)
 	log.Println("DB schema created successfully")
 
-	db.MustExec(addExampleData)
-	log.Println("DB populated with example data")
+	//db.MustExec(addExampleData)
+	//log.Println("DB populated with example data")
 
 	return dbConnection{
 		db: db,
@@ -123,14 +125,19 @@ func createDatabaseConnection() (dbConnection, error) {
 }
 
 func (conn dbConnection) validateUserLogin(email string, password []byte) bool {
-	p := student{}
+	var p Student
 	if err := conn.db.Get(&p, "SELECT email, password FROM person WHERE email=$1", email); err != nil {
 		log.Printf("Failed to query db,\n %e", err)
 		return false
 	}
 
-	if err := bcrypt.CompareHashAndPassword(p.password, password); err != nil {
-		log.Printf("Password did not match \n%e", err)
+	//TODO: Uncomment when passwords are heshed
+	//if err := bcrypt.CompareHashAndPassword([]byte(p.Password), password); err != nil {
+	//	log.Printf("Password did not match \n%e", err)
+	//	return false
+	//}
+	if p.Password != string(password) {
+		log.Printf("Password did not match")
 		return false
 	}
 
@@ -138,31 +145,44 @@ func (conn dbConnection) validateUserLogin(email string, password []byte) bool {
 }
 
 func (conn dbConnection) getUserRoles(uuid string) (roles []string) {
-	if err := conn.db.Get(nil, "SELECT id FROM admin WHERE person_id=$1", uuid); err == nil {
+	dest := ""
+	if err := conn.db.Get(&dest, "SELECT id FROM admin WHERE person_id=$1", uuid); err == nil {
 		roles = append(roles, "Admin")
 	}
 
-	if err := conn.db.Get(nil, "SELECT id FROM student WHERE person_id=$1", uuid); err == nil {
+	if err := conn.db.Get(&dest, "SELECT id FROM student WHERE person_id=$1", uuid); err == nil {
 		roles = append(roles, "Student")
 	}
 
-	if err := conn.db.Get(nil, "SELECT id FROM teacher WHERE person_id=$1", uuid); err == nil {
+	if err := conn.db.Get(&dest, "SELECT id FROM teacher WHERE person_id=$1", uuid); err == nil {
 		roles = append(roles, "Teacher")
 	}
 
 	return roles
 }
 
-func (conn dbConnection) getStudentExams(uuid string) (exams []studentExam, err error) {
-	if err = conn.db.Select(&exams, "SELECT name as courseName, points FROM exam JOIN course c on c.id = exam.course_id WHERE student_id=$1 AND c.deleted=FALSE", uuid); err == nil {
+func (conn dbConnection) getStudentExams(studentEmail string) (exams []StudentExam, err error) {
+	id, err := conn.getStudentIdFromEmail(studentEmail)
+	if err != nil {
+		return exams, err
+	}
+
+	if err = conn.db.Select(&exams, "SELECT e.id, p.name as StudentName, c.name as CourseName, points FROM exam e JOIN course c ON c.id = e.course_id JOIN student s ON s.id = e.student_id JOIN person p ON p.email = s.person_id WHERE student_id=$1 AND c.deleted=FALSE", id); err != nil {
 		return exams, err
 	}
 	return exams, nil
 }
 
+func (conn dbConnection) getStudentIdFromEmail(email string) (id string, err error) {
+	if err = conn.db.Get(&id, "SELECT id FROM student WHERE person_id=$1", email); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
 func (conn dbConnection) insertExam(teacherUUID string, e exam) error {
 	var courses []course
-	if err := conn.db.Select(&courses, "SELECT id FROM course WHERE teacher_id=$1 AND deleted=FALSE", teacherUUID); err == nil {
+	if err := conn.db.Select(&courses, "SELECT id FROM course WHERE teacher_id=$1 AND deleted=FALSE", teacherUUID); err != nil {
 		log.Printf("Failed to get teacher courses")
 		return err
 	}
@@ -176,7 +196,7 @@ func (conn dbConnection) insertExam(teacherUUID string, e exam) error {
 }
 
 func (conn dbConnection) getAllCurriculums() (curriculums []curriculum, err error) {
-	if err = conn.db.Select(&curriculums, "SELECT id, name, required_curriculum_points_to_pass as requiredPoints FROM curriculum WHERE deleted=FALSE"); err == nil {
+	if err = conn.db.Select(&curriculums, "SELECT id, name, required_curriculum_points_to_pass as requiredPoints FROM curriculum WHERE deleted=FALSE"); err != nil {
 		log.Printf("Failed to get curriculums")
 		return nil, err
 	}
@@ -198,7 +218,7 @@ func (conn dbConnection) updateCurriculum(c curriculum) error {
 }
 
 func (conn dbConnection) getAllCourses() (courses []course, err error) {
-	if err = conn.db.Select(&courses, "SELECT id, teacher_id as teacherId, curriculum_id as curriculumId, name, number_of_seats as numberOfSeats FROM course WHERE deleted=FALSE"); err == nil {
+	if err = conn.db.Select(&courses, "SELECT id, teacher_id as teacherId, curriculum_id as curriculumId, name, number_of_seats as numberOfSeats FROM course WHERE deleted=FALSE"); err != nil {
 		log.Printf("Failed to get courses")
 		return nil, err
 	}
@@ -220,22 +240,22 @@ func (conn dbConnection) updateCourse(c course) error {
 }
 
 func (conn dbConnection) getAllExams() (exams []exam, err error) {
-	if err = conn.db.Select(&exams, "SELECT id, course_id as courseID, student_id as studentID, points FROM exam WHERE deleted=FALSE"); err == nil {
+	if err = conn.db.Select(&exams, "SELECT id, course_id as courseID, student_id as studentID, points FROM exam WHERE deleted=FALSE"); err != nil {
 		log.Printf("Failed to get exams")
 		return nil, err
 	}
 	return exams, nil
 }
 
-func (conn dbConnection) getAllStudents() (students []student, err error) {
-	if err = conn.db.Select(&students, "SELECT id, person_id as personID FROM student"); err == nil {
+func (conn dbConnection) getAllStudents() (students []Student, err error) {
+	if err = conn.db.Select(&students, "SELECT id, person_id as personID FROM student"); err != nil {
 		log.Printf("Failed to get students")
 		return nil, err
 	}
 	return students, nil
 }
 
-func (conn dbConnection) insertStudent(s student) error {
+func (conn dbConnection) insertStudent(s Student) error {
 	tx, err := conn.db.Begin()
 
 	defer func(tx *sql.Tx) {
@@ -250,7 +270,7 @@ func (conn dbConnection) insertStudent(s student) error {
 		return err
 	}
 
-	if _, err = tx.Exec("INSERT INTO student(person_id) VALUES ($1)", s.email); err != nil {
+	if _, err = tx.Exec("INSERT INTO student(person_id) VALUES ($1)", s.Email); err != nil {
 		return err
 	}
 
@@ -261,7 +281,7 @@ func (conn dbConnection) insertStudent(s student) error {
 	return nil
 }
 
-func (conn dbConnection) updateStudent(s student) error {
+func (conn dbConnection) updateStudent(s Student) error {
 	tx, err := conn.db.Begin()
 
 	defer func(tx *sql.Tx) {
@@ -276,7 +296,7 @@ func (conn dbConnection) updateStudent(s student) error {
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE student SET person_id=$1 WHERE id=$2", s.email, s.id); err != nil {
+	if _, err = tx.Exec("UPDATE student SET person_id=$1 WHERE id=$2", s.Email, s.id); err != nil {
 		return err
 	}
 
@@ -287,15 +307,15 @@ func (conn dbConnection) updateStudent(s student) error {
 	return nil
 }
 
-func (conn dbConnection) getAllTeachers() (teachers []teacher, err error) {
-	if err = conn.db.Select(&teachers, "SELECT id, person_id as personID FROM teacher"); err == nil {
+func (conn dbConnection) getAllTeachers() (teachers []Teacher, err error) {
+	if err = conn.db.Select(&teachers, "SELECT id, person_id as personID FROM teacher"); err != nil {
 		log.Printf("Failed to get teachers")
 		return nil, err
 	}
 	return teachers, nil
 }
 
-func (conn dbConnection) insertTeacher(t teacher) error {
+func (conn dbConnection) insertTeacher(t Teacher) error {
 	tx, err := conn.db.Begin()
 
 	defer func(tx *sql.Tx) {
@@ -306,11 +326,11 @@ func (conn dbConnection) insertTeacher(t teacher) error {
 		return err
 	}
 
-	if err = insertPerson(tx, student(t)); err != nil {
+	if err = insertPerson(tx, Student(t)); err != nil {
 		return err
 	}
 
-	if _, err = tx.Exec("INSERT INTO teacher(person_id) VALUES ($1)", t.email); err != nil {
+	if _, err = tx.Exec("INSERT INTO teacher(person_id) VALUES ($1)", t.Email); err != nil {
 		return err
 	}
 
@@ -321,7 +341,7 @@ func (conn dbConnection) insertTeacher(t teacher) error {
 	return nil
 }
 
-func (conn dbConnection) updateTeacher(t teacher) error {
+func (conn dbConnection) updateTeacher(t Teacher) error {
 	tx, err := conn.db.Begin()
 
 	defer func(tx *sql.Tx) {
@@ -332,11 +352,11 @@ func (conn dbConnection) updateTeacher(t teacher) error {
 		return err
 	}
 
-	if err = insertPerson(tx, student(t)); err != nil {
+	if err = insertPerson(tx, Student(t)); err != nil {
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE teacher SET person_id=$1 WHERE id=$2", t.email, t.id); err != nil {
+	if _, err = tx.Exec("UPDATE teacher SET person_id=$1 WHERE id=$2", t.Email, t.id); err != nil {
 		return err
 	}
 
@@ -348,19 +368,19 @@ func (conn dbConnection) updateTeacher(t teacher) error {
 }
 
 func (conn dbConnection) delete(table, uuid string) error {
-	if _, err := conn.db.Exec("UPDATE $1 SET deleted=TRUE WHERE id=$2", table, uuid); err == nil {
+	if _, err := conn.db.Exec("UPDATE $1 SET deleted=TRUE WHERE id=$2", table, uuid); err != nil {
 		log.Printf("Failed to delete %s with id %s", table, uuid)
 		return err
 	}
 	return nil
 }
 
-func insertPerson(tx *sql.Tx, s student) error {
+func insertPerson(tx *sql.Tx, s Student) error {
 	//TODO: Hash Password
 	//TODO: Add salt
-	hashedPassword := s.password
+	hashedPassword := s.Password
 
-	if _, err := tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.name, s.email, s.phone, hashedPassword); err != nil {
+	if _, err := tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.name, s.Email, s.phone, hashedPassword); err != nil {
 		return err
 	}
 	return nil
