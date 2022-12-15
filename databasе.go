@@ -23,9 +23,9 @@ DROP TABLE IF EXISTS person;`
 	schema = `
 CREATE TABLE IF NOT EXISTS person (
     email TEXT NOT NULL PRIMARY KEY UNIQUE CHECK (email ~ '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
-    name TEXT NOT NULL,
+    name TEXT NOT NULL CHECK (name <> ''),
     phone TEXT UNIQUE,
-    password TEXT NOT NULL
+    password TEXT NOT NULL CHECK (password <> '')
 );
 
 CREATE TABLE IF NOT EXISTS admin (
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS teacher (
 CREATE TABLE IF NOT EXISTS course (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     teacher_id UUID REFERENCES teacher(id) NOT NULL,
-    name TEXT NOT NULL,
+    name TEXT NOT NULL CHECK (name <> ''),
     number_of_seats INT DEFAULT 50 CHECK (number_of_seats > 0),
     deleted BOOL DEFAULT FALSE,
     UNIQUE(name, teacher_id)
@@ -115,18 +115,18 @@ func createDatabaseConnection() (dbConnection, error) {
 }
 
 func (conn dbConnection) validateUserLogin(email string, password []byte) bool {
-	var p Student
-	if err := conn.db.Get(&p, "SELECT email, password FROM person WHERE email=$1", email); err != nil {
+	var u User
+	if err := conn.db.Get(&u, "SELECT email, password FROM person WHERE email=$1", email); err != nil {
 		log.Printf("Failed to query db,\n %e", err)
 		return false
 	}
 
 	//TODO: Uncomment when passwords are heshed
-	//if err := bcrypt.CompareHashAndPassword([]byte(p.Password), password); err != nil {
+	//if err := bcrypt.CompareHashAndPassword([]byte(u.Password), password); err != nil {
 	//	log.Printf("Password did not match \n%e", err)
 	//	return false
 	//}
-	if p.Password != string(password) {
+	if u.Password != string(password) {
 		log.Printf("Password did not match")
 		return false
 	}
@@ -263,7 +263,7 @@ func (conn dbConnection) getTeacherIdFromEmail(email string) (id string, err err
 }
 
 func (conn dbConnection) getAllCourses() (courses []Course, err error) {
-	if err = conn.db.Select(&courses, "SELECT id, teacher_id as TeacherId, curriculum_id as CurriculumId, name, number_of_seats as NumberOfSeats FROM course WHERE deleted=FALSE"); err != nil {
+	if err = conn.db.Select(&courses, "SELECT id, teacher_id as TeacherId, name, number_of_seats as NumberOfSeats FROM course WHERE deleted=FALSE"); err != nil {
 		log.Printf("Failed to get courses")
 		return nil, err
 	}
@@ -423,7 +423,7 @@ func (conn dbConnection) delete(table, uuid string) error {
 func insertPerson(tx *sql.Tx, s Student) error {
 	//TODO: Hash Password
 	//TODO: Add salt
-	hashedPassword := s.Password
+	hashedPassword := os.Getenv("DEFAULT_PASS")
 
 	if _, err := tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.Name, s.Email, s.Phone, hashedPassword); err != nil {
 		return err

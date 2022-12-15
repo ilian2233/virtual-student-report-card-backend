@@ -97,6 +97,12 @@ func Test_main(t *testing.T) {
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
 		},
+		{
+			"Post student success",
+			requestWithAuth(http.MethodPost, "/admin/students", strings.NewReader(`{"Name": "ivan3", "Email": "test3@test.com", "Phone": "0881234567"}`), "admin"),
+			http.StatusOK,
+			[]byte(`{"message":"success"}`),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
