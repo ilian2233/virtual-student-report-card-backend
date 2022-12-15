@@ -49,9 +49,10 @@ CREATE TABLE IF NOT EXISTS teacher (
 CREATE TABLE IF NOT EXISTS course (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     teacher_id UUID REFERENCES teacher(id) NOT NULL,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
     number_of_seats INT DEFAULT 50 CHECK (number_of_seats > 0),
-    deleted BOOL DEFAULT FALSE
+    deleted BOOL DEFAULT FALSE,
+    UNIQUE(name, teacher_id)
 );
 
 CREATE TABLE IF NOT EXISTS exam (
@@ -83,7 +84,7 @@ INSERT INTO course(teacher_id, name) VALUES
     ((SELECT id FROM teacher LIMIT 1), 'Programming Basics');
 
 INSERT INTO exam(course_id, student_id, points) VALUES 
-    ((SELECT id FROM course WHERE name='Math'),(SELECT id FROM student LIMIT 1), 56);
+    ((SELECT id FROM course WHERE name='Math' LIMIT 1),(SELECT id FROM student LIMIT 1), 56);
 `
 )
 
@@ -169,8 +170,8 @@ func (conn dbConnection) getStudentIdFromEmail(email string) (id string, err err
 	return id, nil
 }
 
-func (conn dbConnection) insertExam(email string, e InputExam) error {
-	courses, err := conn.getTeacherCourses(email)
+func (conn dbConnection) insertExam(teacherEmail string, e InputExam) error {
+	courses, err := conn.getTeacherCourses(teacherEmail)
 	if err != nil {
 		return err
 	}
@@ -179,8 +180,13 @@ func (conn dbConnection) insertExam(email string, e InputExam) error {
 		return fmt.Errorf("course not led by that teacher")
 	}
 
+	teacherId, err := conn.getTeacherIdFromEmail(teacherEmail)
+	if err != nil {
+		return err
+	}
+
 	var courseID string
-	if err = conn.db.Get(&courseID, "SELECT id FROM course WHERE name = $1", e.CourseName); err != nil {
+	if err = conn.db.Get(&courseID, "SELECT id FROM course WHERE name = $1 AND teacher_id = $2", e.CourseName, teacherId); err != nil {
 		return err
 	}
 
