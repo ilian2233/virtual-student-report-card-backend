@@ -41,7 +41,7 @@ func Test_main(t *testing.T) {
 			"Successful auth",
 			httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(`{ "Email":"test@test.com", "Password": "test_pas_123"}`)),
 			http.StatusOK,
-			[]byte(``),
+			nil,
 		},
 		{
 			"Get student exams without auth",
@@ -114,6 +114,10 @@ func Test_main(t *testing.T) {
 
 				}
 			}(respRec.Result().Body)
+
+			if test.expectedBody == nil {
+				return
+			}
 
 			body, err := io.ReadAll(respRec.Result().Body)
 			if err != nil {
