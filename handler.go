@@ -56,11 +56,6 @@ func setupHandler(db dbConnection) *http.ServeMux {
 	return mainHandler
 }
 
-type User struct {
-	Email    string
-	Password string
-}
-
 func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		respondWithMessage(w, "Only POST method is allowed", http.StatusBadRequest)
