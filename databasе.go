@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/jmoiron/sqlx"
+	"golang.org/x/crypto/bcrypt"
 )
 
 //TODO: Update teacher and student insert and update strategies
@@ -24,7 +25,7 @@ DROP TABLE IF EXISTS person;`
 CREATE TABLE IF NOT EXISTS person (
     email TEXT NOT NULL PRIMARY KEY UNIQUE CHECK (email ~ '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
     name TEXT NOT NULL CHECK (name <> ''),
-    phone TEXT UNIQUE,
+    phone TEXT,
     password TEXT NOT NULL CHECK (password <> '')
 );
 
@@ -66,9 +67,9 @@ CREATE TABLE IF NOT EXISTS exam (
 
 	addExampleData = `
 INSERT INTO person(name, phone, email, password) VALUES 
-    ('ivan', '0881234563', 'test@test.com', 'test_pas_123'),
-    ('ivan1', '0881234564', 'test1@test.com', 'test_pas_123'),
-    ('ivan2', '0881234565', 'test2@test.com', 'test_pas_123');
+    ('ivan', '0881234563', 'test@test.com', '$2a$10$hk6NfxXSkNUzEd7fiqGyxOGUjimPR/jtdmRf0yrbB/eKfh5HwKe4q'),
+    ('ivan1', '0881234564', 'test1@test.com', '$2a$10$hk6NfxXSkNUzEd7fiqGyxOGUjimPR/jtdmRf0yrbB/eKfh5HwKe4q'),
+    ('ivan2', '0881234565', 'test2@test.com', '$2a$10$hk6NfxXSkNUzEd7fiqGyxOGUjimPR/jtdmRf0yrbB/eKfh5HwKe4q');
 
 INSERT INTO admin(person_id) VALUES 
     ((SELECT email FROM person WHERE name='ivan'));
@@ -121,13 +122,8 @@ func (conn dbConnection) validateUserLogin(email string, password []byte) bool {
 		return false
 	}
 
-	//TODO: Uncomment when passwords are heshed
-	//if err := bcrypt.CompareHashAndPassword([]byte(u.Password), password); err != nil {
-	//	log.Printf("Password did not match \n%e", err)
-	//	return false
-	//}
-	if u.Password != string(password) {
-		log.Printf("Password did not match")
+	if err := bcrypt.CompareHashAndPassword([]byte(u.Password), password); err != nil {
+		log.Printf("Password did not match \n%e", err)
 		return false
 	}
 
@@ -151,7 +147,7 @@ func (conn dbConnection) getUserRoles(uuid string) (roles []string) {
 	return roles
 }
 
-func (conn dbConnection) getStudentExams(studentEmail string) (exams []StudentExam, err error) {
+func (conn dbConnection) getStudentExams(studentEmail string) (exams []Exam, err error) {
 	id, err := conn.getStudentIdFromEmail(studentEmail)
 	if err != nil {
 		return exams, err
@@ -170,7 +166,7 @@ func (conn dbConnection) getStudentIdFromEmail(email string) (id string, err err
 	return id, nil
 }
 
-func (conn dbConnection) insertExam(teacherEmail string, e InputExam) error {
+func (conn dbConnection) insertExam(teacherEmail string, e Exam) error {
 	courses, err := conn.getTeacherCourses(teacherEmail)
 	if err != nil {
 		return err
@@ -353,11 +349,25 @@ func (conn dbConnection) updateStudent(s Student) error {
 }
 
 func (conn dbConnection) getAllTeachers() (teachers []Teacher, err error) {
-	if err = conn.db.Select(&teachers, "SELECT id, person_id as personID FROM teacher"); err != nil {
+	if err = conn.db.Select(&teachers, "SELECT id as Id, name as Name, phone as Phone, email as Email FROM teacher JOIN person p on p.email = teacher.person_id"); err != nil {
 		log.Printf("Failed to get teachers")
 		return nil, err
 	}
 	return teachers, nil
+}
+
+func (conn dbConnection) getTeacherEmails() ([]string, error) {
+	teachers, err := conn.getAllTeachers()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []string
+	for _, v := range teachers {
+		result = append(result, v.Email)
+	}
+
+	return result, nil
 }
 
 func (conn dbConnection) insertTeacher(t Teacher) error {
@@ -421,11 +431,15 @@ func (conn dbConnection) delete(table, uuid string) error {
 }
 
 func insertPerson(tx *sql.Tx, s Student) error {
-	//TODO: Hash Password
-	//TODO: Add salt
-	hashedPassword := os.Getenv("DEFAULT_PASS")
 
-	if _, err := tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.Name, s.Email, s.Phone, hashedPassword); err != nil {
+	defaultPass := []byte(os.Getenv("DEFAULT_PASS"))
+
+	hashedPassword, err := bcrypt.GenerateFromPassword(defaultPass, bcrypt.DefaultCost)
+	if err != nil {
+		log.Println(err)
+	}
+
+	if _, err = tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.Name, s.Email, s.Phone, hashedPassword); err != nil {
 		return err
 	}
 	return nil

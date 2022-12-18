@@ -53,7 +53,7 @@ func Test_main(t *testing.T) {
 			"Get student exams",
 			requestWithAuth(http.MethodGet, "/student/exams", nil, "student"),
 			http.StatusOK,
-			[]byte(`[{"StudentName":"ivan1","CourseName":"Math","Points":56}]`),
+			[]byte(`[{"StudentName":"ivan1","StudentEmail":"","CourseName":"Math","Points":56}]`),
 		},
 		{
 			"Unauthorised access teacher",
@@ -102,6 +102,18 @@ func Test_main(t *testing.T) {
 			requestWithAuth(http.MethodPost, "/admin/students", strings.NewReader(`{"Name": "ivan3", "Email": "test3@test.com", "Phone": "0881234567"}`), "admin"),
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
+		},
+		{
+			"Get teachers",
+			requestWithAuth(http.MethodGet, "/admin/teachers", nil, "admin"),
+			http.StatusOK,
+			[]byte(`["test2@test.com"]`),
+		},
+		{
+			"Post student with empty data",
+			requestWithAuth(http.MethodPost, "/admin/students", strings.NewReader(`{"Name":"","Email":"","Phone":""}`), "admin"),
+			http.StatusBadRequest,
+			[]byte(`{"message":"something went wrong"}`),
 		},
 	}
 	for _, test := range tests {

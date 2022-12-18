@@ -33,13 +33,8 @@ type exam struct {
 	points    int
 }
 
-type StudentExam struct {
-	StudentName string
-	CourseName  string
-	Points      int
-}
-
-type InputExam struct {
+type Exam struct {
+	StudentName  string
 	StudentEmail string
 	CourseName   string
 	Points       int
