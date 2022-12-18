@@ -18,8 +18,8 @@ type handler struct {
 	db        interface {
 		validateUserLogin(email string, password []byte) bool
 		getUserRoles(email string) []string
-		getStudentExams(email string) ([]StudentExam, error)
-		insertExam(email string, e InputExam) error
+		getStudentExams(email string) ([]Exam, error)
+		insertExam(email string, e Exam) error
 		getTeacherCourseNames(email string) ([]string, error)
 		getStudentEmails() ([]string, error)
 		delete(table, uuid string) error
@@ -30,7 +30,7 @@ type handler struct {
 		getAllStudents() ([]Student, error)
 		insertStudent(Student) error
 		updateStudent(Student) error
-		getAllTeachers() ([]Teacher, error)
+		getTeacherEmails() ([]string, error)
 		insertTeacher(Teacher) error
 		updateTeacher(Teacher) error
 	}
@@ -200,7 +200,7 @@ func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var e InputExam
+	var e Exam
 	if err = json.Unmarshal(b, &e); err != nil {
 		log.Printf("Couldn't unmarshall exams")
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
@@ -209,7 +209,7 @@ func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
 
 	if err = h.db.insertExam(email, e); err != nil {
 		log.Printf("Exams insert failed with \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
 		return
 	}
 
@@ -394,7 +394,7 @@ func (h handler) upsertCourses(w http.ResponseWriter, r *http.Request, insert bo
 
 	if err != nil {
 		log.Printf("Course insert failed with \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
 		return
 	}
 
@@ -545,7 +545,7 @@ func (h handler) upsertStudents(w http.ResponseWriter, r *http.Request, insert b
 
 	if err != nil {
 		log.Printf("Student insert failed with \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
 		return
 	}
 
@@ -589,23 +589,23 @@ func (h handler) teachers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) getTeachers(w http.ResponseWriter) {
-	teachers, err := h.db.getAllTeachers()
+	teacherEmails, err := h.db.getTeacherEmails()
 	if err != nil {
-		log.Printf("Failed to get teachers \n%e", err)
+		log.Printf("Failed to get teacherEmails \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
-	resp, err := json.Marshal(teachers)
+	resp, err := json.Marshal(teacherEmails)
 	if err != nil {
-		fmt.Printf("Failed to marshall teachers \n%e", err)
+		fmt.Printf("Failed to marshall teacherEmails \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if _, err = w.Write(resp); err != nil {
-		fmt.Printf("Failed to write teachers \n%e", err)
+		fmt.Printf("Failed to write teacherEmails \n%e", err)
 	}
 }
 
@@ -639,7 +639,7 @@ func (h handler) upsertTeachers(w http.ResponseWriter, r *http.Request, insert b
 
 	if err != nil {
 		log.Printf("Teacher insert failed with \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
 		return
 	}
 
