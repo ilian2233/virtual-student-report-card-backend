@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/smtp"
 	"os"
 
+	"github.com/dchest/uniuri"
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -431,12 +433,30 @@ func (conn dbConnection) delete(table, uuid string) error {
 }
 
 func insertPerson(tx *sql.Tx, s Student) error {
+	defaultPass := []byte(uniuri.NewLen(7))
+	from := os.Getenv("MAIL")
+	emailCred := os.Getenv("PASSWD")
 
-	defaultPass := []byte(os.Getenv("DEFAULT_PASS"))
+	toList := []string{"ilianbb4@gmail.com"}
+	host := "smtp.gmail.com"
+	port := "587"
+	body := []byte(fmt.Sprintf("To: %s\r\n"+"Subject: Technical university password!\r\n"+"\r\n"+"This is your password: %s\r\n", s.Email, defaultPass))
+
+	auth := smtp.PlainAuth("", from, emailCred, host)
+
+	if err := smtp.SendMail(host+":"+port, auth, from, toList, body); err != nil {
+		fmt.Println(err)
+		if err = tx.Rollback(); err != nil {
+			return err
+		}
+	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword(defaultPass, bcrypt.DefaultCost)
 	if err != nil {
 		log.Println(err)
+		if err = tx.Rollback(); err != nil {
+			return err
+		}
 	}
 
 	if _, err = tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.Name, s.Email, s.Phone, hashedPassword); err != nil {
