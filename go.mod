@@ -11,4 +11,7 @@ require (
 	golang.org/x/crypto v0.3.0
 )
 
-require golang.org/x/exp v0.0.0-20221212164502-fae10dda9338 // indirect
+require (
+	github.com/dchest/uniuri v1.2.0 // indirect
+	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338 // indirect
+)
