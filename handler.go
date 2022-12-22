@@ -21,7 +21,7 @@ type handler struct {
 		getStudentExams(email string) ([]Exam, error)
 		insertExam(email string, e Exam) error
 		getTeacherCourseNames(email string) ([]string, error)
-		getStudentEmails() ([]string, error)
+		getStudentFacultyNumbers() ([]string, error)
 		delete(table, uuid string) error
 		getAllCourses() ([]Course, error)
 		insertCourse(Course) error
@@ -47,7 +47,7 @@ func setupHandler(db dbConnection) *http.ServeMux {
 	mainHandler.HandleFunc("/student/exams", corsHandler(h.getStudentExams))
 	mainHandler.HandleFunc("/teacher/exams", corsHandler(h.postTeacherExams))
 	mainHandler.HandleFunc("/teacher/courses", corsHandler(h.getTeacherCourses))
-	mainHandler.HandleFunc("/teacher/students", corsHandler(h.getStudentEmails))
+	mainHandler.HandleFunc("/teacher/students", corsHandler(h.getStudentFacultyNumbers))
 	mainHandler.HandleFunc("/admin/courses", corsHandler(h.courses))
 	//mainHandler.HandleFunc("/admin/exams", corsHandler(h.getExams))
 	mainHandler.HandleFunc("/admin/students", corsHandler(h.students))
@@ -260,7 +260,7 @@ func (h handler) getTeacherCourses(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h handler) getStudentEmails(w http.ResponseWriter, r *http.Request) {
+func (h handler) getStudentFacultyNumbers(w http.ResponseWriter, r *http.Request) {
 	_, err := performChecks([]string{http.MethodGet}, "Teacher", r)
 
 	switch true {
@@ -284,7 +284,7 @@ func (h handler) getStudentEmails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	courses, err := h.db.getStudentEmails()
+	courses, err := h.db.getStudentFacultyNumbers()
 	if err != nil {
 		log.Printf("Failed to get student courses \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)

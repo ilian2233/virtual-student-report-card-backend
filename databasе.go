@@ -229,7 +229,7 @@ func (conn dbConnection) getTeacherCourseNames(email string) ([]string, error) {
 	return result, nil
 }
 
-func (conn dbConnection) getStudentEmails() ([]string, error) {
+func (conn dbConnection) getStudentFacultyNumbers() ([]string, error) {
 	students, err := conn.getAllStudents()
 	if err != nil {
 		return nil, err
@@ -237,7 +237,7 @@ func (conn dbConnection) getStudentEmails() ([]string, error) {
 
 	var result []string
 	for _, v := range students {
-		result = append(result, v.Email)
+		result = append(result, v.FacultyNumber)
 	}
 
 	return result, nil
@@ -281,7 +281,7 @@ func (conn dbConnection) updateCourse(c Course) error {
 //}
 
 func (conn dbConnection) getAllStudents() (students []Student, err error) {
-	if err = conn.db.Select(&students, "SELECT id as Id, name as Name, phone as Phone, email as Email FROM student JOIN person p on p.email = student.person_id"); err != nil {
+	if err = conn.db.Select(&students, "SELECT id as Id, name as Name, phone as Phone, email as Email, faculty_number as FacultyNumber FROM student JOIN person p on p.email = student.person_id"); err != nil {
 		log.Printf("Failed to get students")
 		return nil, err
 	}
