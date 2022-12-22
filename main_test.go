@@ -77,7 +77,7 @@ func Test_main(t *testing.T) {
 			"Get teacher students",
 			requestWithAuth(http.MethodGet, "/teacher/students", nil, "teacher"),
 			http.StatusOK,
-			[]byte(`["test1@test.com"]`),
+			[]byte(`["12312312"]`),
 		},
 		{
 			"Post exam with empty body",
