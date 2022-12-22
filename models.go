@@ -5,11 +5,18 @@ type User struct {
 	Password string
 }
 
-type Student struct {
-	Id    string
+type person struct {
 	Name  string
-	Phone string
 	Email string
+	Phone string
+}
+
+type Student struct {
+	Id            string
+	FacultyNumber string
+	Name          string
+	Phone         string
+	Email         string
 }
 
 type Teacher struct {
