@@ -99,7 +99,7 @@ func Test_main(t *testing.T) {
 		},
 		{
 			"Post student success",
-			requestWithAuth(http.MethodPost, "/admin/students", strings.NewReader(`{"Name": "ivan3", "Email": "test3@test.com", "Phone": "0881234567"}`), "admin"),
+			requestWithAuth(http.MethodPost, "/admin/students", strings.NewReader(`{"Name": "ivan3","FacultyNumber":"23423423", "Email": "test3@test.com", "Phone": "0881234567"}`), "admin"),
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
 		},

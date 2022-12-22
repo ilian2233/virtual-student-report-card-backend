@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS admin (
 
 CREATE TABLE IF NOT EXISTS student (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+	faculty_number TEXT UNIQUE NOT NULL CHECK ( faculty_number ~ '^\d{8}$'),
     person_id TEXT REFERENCES person(email) NOT NULL
 );
 
@@ -76,8 +77,8 @@ INSERT INTO person(name, phone, email, password) VALUES
 INSERT INTO admin(person_id) VALUES 
     ((SELECT email FROM person WHERE name='ivan'));
 
-INSERT INTO student(person_id) VALUES 
-    ((SELECT email FROM person WHERE name='ivan1'));
+INSERT INTO student(faculty_number, person_id) VALUES 
+    ('12312312',(SELECT email FROM person WHERE name='ivan1'));
 
 INSERT INTO teacher(person_id) VALUES 
     ((SELECT email FROM person WHERE name='ivan2'));
@@ -309,11 +310,11 @@ func (conn dbConnection) insertStudent(s Student) error {
 		return err
 	}
 
-	if err = insertPerson(tx, s); err != nil {
+	if err = insertPerson(tx, person{s.Name, s.Email, s.Phone}); err != nil {
 		return err
 	}
 
-	if _, err = tx.Exec("INSERT INTO student(person_id) VALUES ($1)", s.Email); err != nil {
+	if _, err = tx.Exec("INSERT INTO student(faculty_number, person_id) VALUES ($1,$2)", s.FacultyNumber, s.Email); err != nil {
 		return err
 	}
 
@@ -335,7 +336,7 @@ func (conn dbConnection) updateStudent(s Student) error {
 		return err
 	}
 
-	if err = insertPerson(tx, s); err != nil {
+	if err = insertPerson(tx, person{s.Name, s.Email, s.Phone}); err != nil {
 		return err
 	}
 
@@ -383,7 +384,7 @@ func (conn dbConnection) insertTeacher(t Teacher) error {
 		return err
 	}
 
-	if err = insertPerson(tx, Student(t)); err != nil {
+	if err = insertPerson(tx, person{t.Name, t.Email, t.Phone}); err != nil {
 		return err
 	}
 
@@ -409,7 +410,7 @@ func (conn dbConnection) updateTeacher(t Teacher) error {
 		return err
 	}
 
-	if err = insertPerson(tx, Student(t)); err != nil {
+	if err = insertPerson(tx, person{t.Name, t.Email, t.Phone}); err != nil {
 		return err
 	}
 
@@ -432,7 +433,7 @@ func (conn dbConnection) delete(table, uuid string) error {
 	return nil
 }
 
-func insertPerson(tx *sql.Tx, s Student) error {
+func insertPerson(tx *sql.Tx, p person) error {
 	defaultPass := []byte(uniuri.NewLen(7))
 	from := os.Getenv("MAIL")
 	emailCred := os.Getenv("PASSWD")
@@ -440,7 +441,7 @@ func insertPerson(tx *sql.Tx, s Student) error {
 	toList := []string{"ilianbb4@gmail.com"}
 	host := "smtp.gmail.com"
 	port := "587"
-	body := []byte(fmt.Sprintf("To: %s\r\n"+"Subject: Technical university password!\r\n"+"\r\n"+"This is your password: %s\r\n", s.Email, defaultPass))
+	body := []byte(fmt.Sprintf("To: %s\r\n"+"Subject: Technical university password!\r\n"+"\r\n"+"This is your password: %s\r\n", p.Email, defaultPass))
 
 	auth := smtp.PlainAuth("", from, emailCred, host)
 
@@ -459,7 +460,7 @@ func insertPerson(tx *sql.Tx, s Student) error {
 		}
 	}
 
-	if _, err = tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", s.Name, s.Email, s.Phone, hashedPassword); err != nil {
+	if _, err = tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", p.Name, p.Email, p.Phone, hashedPassword); err != nil {
 		return err
 	}
 	return nil
