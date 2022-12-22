@@ -53,7 +53,7 @@ func Test_main(t *testing.T) {
 			"Get student exams",
 			requestWithAuth(http.MethodGet, "/student/exams", nil, "student"),
 			http.StatusOK,
-			[]byte(`[{"StudentName":"ivan1","StudentEmail":"","CourseName":"Math","Points":56}]`),
+			[]byte(`[{"StudentName":"ivan1","StudentFacultyNumber":"","CourseName":"Math","Points":56}]`),
 		},
 		{
 			"Unauthorised access teacher",
@@ -87,19 +87,19 @@ func Test_main(t *testing.T) {
 		},
 		{
 			"Post exam success",
-			requestWithAuth(http.MethodPost, "/teacher/exams", strings.NewReader(`{ "StudentEmail":"test1@test.com", "CourseName": "Math", "Points": 42}`), "teacher"),
+			requestWithAuth(http.MethodPost, "/teacher/exams", strings.NewReader(`{ "StudentFacultyNumber":"12312312", "CourseName": "Math", "Points": 42}`), "teacher"),
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
 		},
 		{
 			"Post exam success1",
-			requestWithAuth(http.MethodPost, "/teacher/exams", strings.NewReader(`{"CourseName":"Math","StudentEmail":"test1@test.com","Points":34}`), "teacher"),
+			requestWithAuth(http.MethodPost, "/teacher/exams", strings.NewReader(`{"CourseName":"Math","StudentFacultyNumber":"12312312","Points":34}`), "teacher"),
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
 		},
 		{
 			"Post student success",
-			requestWithAuth(http.MethodPost, "/admin/students", strings.NewReader(`{"Name": "ivan3","FacultyNumber":"23423423", "Email": "test3@test.com", "Phone": "0881234567"}`), "admin"),
+			requestWithAuth(http.MethodPost, "/admin/students", strings.NewReader(`{"Name": "ivan3","StudentFacultyNumber":"23423423", "Email": "test3@test.com", "Phone": "0881234567"}`), "admin"),
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
 		},

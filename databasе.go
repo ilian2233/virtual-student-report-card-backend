@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/smtp"
 	"os"
 
@@ -62,7 +63,7 @@ CREATE TABLE IF NOT EXISTS course (
 CREATE TABLE IF NOT EXISTS exam (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_id UUID REFERENCES course(id) NOT NULL,
-    student_id UUID REFERENCES student(id) NOT NULL,
+    student_faculty_number TEXT REFERENCES student(faculty_number) NOT NULL,
     points INT CHECK (points > 0),
   	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted BOOL DEFAULT FALSE
@@ -87,8 +88,8 @@ INSERT INTO course(teacher_id, name) VALUES
     ((SELECT id FROM teacher LIMIT 1), 'Math'), 
     ((SELECT id FROM teacher LIMIT 1), 'Programming Basics');
 
-INSERT INTO exam(course_id, student_id, points) VALUES 
-    ((SELECT id FROM course WHERE name='Math' LIMIT 1),(SELECT id FROM student LIMIT 1), 56);
+INSERT INTO exam(course_id, student_faculty_number, points) VALUES 
+    ((SELECT id FROM course WHERE name='Math' LIMIT 1),(SELECT faculty_number FROM student LIMIT 1), 56);
 `
 )
 
@@ -151,22 +152,15 @@ func (conn dbConnection) getUserRoles(uuid string) (roles []string) {
 }
 
 func (conn dbConnection) getStudentExams(studentEmail string) (exams []Exam, err error) {
-	id, err := conn.getStudentIdFromEmail(studentEmail)
-	if err != nil {
+	var studentFacultyNumber string
+	if err = conn.db.Get(&studentFacultyNumber, "SELECT faculty_number FROM student WHERE person_id=$1", studentEmail); err != nil {
 		return exams, err
 	}
 
-	if err = conn.db.Select(&exams, "SELECT p.name as StudentName, c.name as CourseName, points FROM exam e JOIN course c ON c.id = e.course_id JOIN student s ON s.id = e.student_id JOIN person p ON p.email = s.person_id WHERE student_id=$1 AND c.deleted=FALSE", id); err != nil {
+	if err = conn.db.Select(&exams, "SELECT p.name as StudentName, c.name as CourseName, points FROM exam e JOIN course c ON c.id = e.course_id JOIN student s ON s.faculty_number = e.student_faculty_number JOIN person p ON p.email = s.person_id WHERE faculty_number=$1 AND c.deleted=FALSE", studentFacultyNumber); err != nil {
 		return exams, err
 	}
 	return exams, nil
-}
-
-func (conn dbConnection) getStudentIdFromEmail(email string) (id string, err error) {
-	if err = conn.db.Get(&id, "SELECT id FROM student WHERE person_id=$1", email); err != nil {
-		return "", err
-	}
-	return id, nil
 }
 
 func (conn dbConnection) insertExam(teacherEmail string, e Exam) error {
@@ -189,12 +183,7 @@ func (conn dbConnection) insertExam(teacherEmail string, e Exam) error {
 		return err
 	}
 
-	var studentID string
-	if err = conn.db.Get(&studentID, "SELECT id FROM student WHERE person_id = $1", e.StudentEmail); err != nil {
-		return err
-	}
-
-	if _, err = conn.db.Exec("INSERT INTO exam(course_id, student_id, points) VALUES ($1, $2, $3)", courseID, studentID, e.Points); err != nil {
+	if _, err = conn.db.Exec("INSERT INTO exam(course_id, student_faculty_number, points) VALUES ($1, $2, $3)", courseID, e.StudentFacultyNumber, e.Points); err != nil {
 		return err
 	}
 	return nil
@@ -283,13 +272,13 @@ func (conn dbConnection) updateCourse(c Course) error {
 	return nil
 }
 
-func (conn dbConnection) getAllExams() (exams []exam, err error) {
-	if err = conn.db.Select(&exams, "SELECT id, course_id as courseID, student_id as studentID, points FROM exam WHERE deleted=FALSE"); err != nil {
-		log.Printf("Failed to get exams")
-		return nil, err
-	}
-	return exams, nil
-}
+//func (conn dbConnection) getAllExams() (exams []exam, err error) {
+//	if err = conn.db.Select(&exams, "SELECT id, course_id as courseID, student_faculty_number as studentID, points FROM exam WHERE deleted=FALSE"); err != nil {
+//		log.Printf("Failed to get exams")
+//		return nil, err
+//	}
+//	return exams, nil
+//}
 
 func (conn dbConnection) getAllStudents() (students []Student, err error) {
 	if err = conn.db.Select(&students, "SELECT id as Id, name as Name, phone as Phone, email as Email FROM student JOIN person p on p.email = student.person_id"); err != nil {
@@ -314,7 +303,7 @@ func (conn dbConnection) insertStudent(s Student) error {
 		return err
 	}
 
-	if _, err = tx.Exec("INSERT INTO student(faculty_number, person_id) VALUES ($1,$2)", s.FacultyNumber, s.Email); err != nil {
+	if _, err = tx.Exec("INSERT INTO student(faculty_number, person_id) VALUES ($1,$2)", generateFacultyNumber(), s.Email); err != nil {
 		return err
 	}
 
@@ -323,6 +312,10 @@ func (conn dbConnection) insertStudent(s Student) error {
 	}
 
 	return nil
+}
+
+func generateFacultyNumber() string {
+	return fmt.Sprint(10000000 + rand.Intn(99999999-10000000))
 }
 
 func (conn dbConnection) updateStudent(s Student) error {

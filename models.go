@@ -41,8 +41,8 @@ type exam struct {
 }
 
 type Exam struct {
-	StudentName  string
-	StudentEmail string
-	CourseName   string
-	Points       int
+	StudentName          string
+	StudentFacultyNumber string
+	CourseName           string
+	Points               int
 }

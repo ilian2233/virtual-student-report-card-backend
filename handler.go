@@ -26,7 +26,7 @@ type handler struct {
 		getAllCourses() ([]Course, error)
 		insertCourse(Course) error
 		updateCourse(Course) error
-		getAllExams() ([]exam, error)
+		//getAllExams() ([]exam, error)
 		getAllStudents() ([]Student, error)
 		insertStudent(Student) error
 		updateStudent(Student) error
@@ -49,7 +49,7 @@ func setupHandler(db dbConnection) *http.ServeMux {
 	mainHandler.HandleFunc("/teacher/courses", corsHandler(h.getTeacherCourses))
 	mainHandler.HandleFunc("/teacher/students", corsHandler(h.getStudentEmails))
 	mainHandler.HandleFunc("/admin/courses", corsHandler(h.courses))
-	mainHandler.HandleFunc("/admin/exams", corsHandler(h.getExams))
+	//mainHandler.HandleFunc("/admin/exams", corsHandler(h.getExams))
 	mainHandler.HandleFunc("/admin/students", corsHandler(h.students))
 	mainHandler.HandleFunc("/admin/teachers", corsHandler(h.teachers))
 
@@ -413,49 +413,49 @@ func (h handler) deleteCourse(w http.ResponseWriter, r *http.Request) {
 	respondWithMessage(w, "success", http.StatusOK)
 }
 
-func (h handler) getExams(w http.ResponseWriter, r *http.Request) {
-	_, err := performChecks([]string{http.MethodGet, http.MethodPost}, "Admin", r)
-
-	switch true {
-	case errors.Is(err, errForbiddenMethod):
-		respondWithMessage(w, "Only GET and POST methods are allowed", http.StatusBadRequest)
-		return
-	case errors.Is(err, errValidatingJWT):
-		respondWithMessage(w, "unauthorized", http.StatusForbidden)
-		return
-	case errors.Is(err, errMissingRole):
-		log.Printf("Roles list doesn't contain admin")
-		respondWithMessage(w, "unauthorized", http.StatusForbidden)
-		return
-	case errors.Is(err, jwt.ErrTokenInvalidClaims):
-		log.Printf("Couldn't parse claims")
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	case errors.Is(err, jwt.ErrTokenInvalidId):
-		log.Printf("Couldn't parse uuid")
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	exams, err := h.db.getAllExams()
-	if err != nil {
-		log.Printf("Failed to get courses \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := json.Marshal(exams)
-	if err != nil {
-		fmt.Printf("Failed to marshall courses \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if _, err = w.Write(resp); err != nil {
-		fmt.Printf("Failed to write courses \n%e", err)
-	}
-}
+//func (h handler) getExams(w http.ResponseWriter, r *http.Request) {
+//	_, err := performChecks([]string{http.MethodGet, http.MethodPost}, "Admin", r)
+//
+//	switch true {
+//	case errors.Is(err, errForbiddenMethod):
+//		respondWithMessage(w, "Only GET and POST methods are allowed", http.StatusBadRequest)
+//		return
+//	case errors.Is(err, errValidatingJWT):
+//		respondWithMessage(w, "unauthorized", http.StatusForbidden)
+//		return
+//	case errors.Is(err, errMissingRole):
+//		log.Printf("Roles list doesn't contain admin")
+//		respondWithMessage(w, "unauthorized", http.StatusForbidden)
+//		return
+//	case errors.Is(err, jwt.ErrTokenInvalidClaims):
+//		log.Printf("Couldn't parse claims")
+//		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+//		return
+//	case errors.Is(err, jwt.ErrTokenInvalidId):
+//		log.Printf("Couldn't parse uuid")
+//		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+//		return
+//	}
+//
+//	exams, err := h.db.getAllExams()
+//	if err != nil {
+//		log.Printf("Failed to get courses \n%e", err)
+//		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+//		return
+//	}
+//
+//	resp, err := json.Marshal(exams)
+//	if err != nil {
+//		fmt.Printf("Failed to marshall courses \n%e", err)
+//		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+//		return
+//	}
+//
+//	w.Header().Set("Content-Type", "application/json")
+//	if _, err = w.Write(resp); err != nil {
+//		fmt.Printf("Failed to write courses \n%e", err)
+//	}
+//}
 
 func (h handler) students(w http.ResponseWriter, r *http.Request) {
 	_, err := performChecks([]string{http.MethodGet, http.MethodPost, http.MethodPatch}, "Admin", r)
