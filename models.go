@@ -12,7 +12,6 @@ type person struct {
 }
 
 type Student struct {
-	Id            string
 	FacultyNumber string
 	Name          string
 	Phone         string
@@ -20,7 +19,6 @@ type Student struct {
 }
 
 type Teacher struct {
-	Id    string
 	Name  string
 	Phone string
 	Email string

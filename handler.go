@@ -26,13 +26,13 @@ type handler struct {
 		getAllCourses() ([]Course, error)
 		insertCourse(Course) error
 		updateCourse(Course) error
-		//getAllExams() ([]exam, error)
 		getAllStudents() ([]Student, error)
 		insertStudent(Student) error
 		updateStudent(Student) error
 		getTeacherEmails() ([]string, error)
 		insertTeacher(Teacher) error
 		updateTeacher(Teacher) error
+		getUsers(role string) (any, error)
 	}
 }
 
@@ -52,6 +52,7 @@ func setupHandler(db dbConnection) *http.ServeMux {
 	//mainHandler.HandleFunc("/admin/exams", corsHandler(h.getExams))
 	mainHandler.HandleFunc("/admin/students", corsHandler(h.students))
 	mainHandler.HandleFunc("/admin/teachers", corsHandler(h.teachers))
+	mainHandler.HandleFunc("/admin/users", corsHandler(h.getUserData))
 
 	return mainHandler
 }
@@ -644,4 +645,50 @@ func (h handler) upsertTeachers(w http.ResponseWriter, r *http.Request, insert b
 	}
 
 	respondWithMessage(w, "success", http.StatusOK)
+}
+
+func (h handler) getUserData(w http.ResponseWriter, r *http.Request) {
+	_, err := performChecks([]string{http.MethodGet}, "Admin", r)
+
+	switch true {
+	case errors.Is(err, errForbiddenMethod):
+		respondWithMessage(w, "Only GET methods are allowed", http.StatusBadRequest)
+		return
+	case errors.Is(err, errValidatingJWT):
+		respondWithMessage(w, "unauthorized", http.StatusForbidden)
+		return
+	case errors.Is(err, errMissingRole):
+		log.Printf("Roles list doesn't contain admin")
+		respondWithMessage(w, "unauthorized", http.StatusForbidden)
+		return
+	case errors.Is(err, jwt.ErrTokenInvalidClaims):
+		log.Printf("Couldn't parse claims")
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	case errors.Is(err, jwt.ErrTokenInvalidId):
+		log.Printf("Couldn't parse uuid")
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	role := r.URL.Query().Get("role")
+
+	users, err := h.db.getUsers(role)
+	if err != nil {
+		log.Printf("Failed to get users \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := json.Marshal(users)
+	if err != nil {
+		fmt.Printf("Failed to marshall teacherEmails \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err = w.Write(resp); err != nil {
+		fmt.Printf("Failed to write teacherEmails \n%e", err)
+	}
 }
