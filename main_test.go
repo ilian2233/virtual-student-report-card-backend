@@ -18,13 +18,6 @@ func Test_main(t *testing.T) {
 		log.Fatalf("Error loading .env file \n%e", err)
 	}
 
-	db, err := createDatabaseConnection()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	h := setupHandler(db)
-
 	tests := []struct {
 		name               string
 		req                *http.Request
@@ -115,9 +108,28 @@ func Test_main(t *testing.T) {
 			http.StatusBadRequest,
 			[]byte(`{"message":"something went wrong"}`),
 		},
+		{
+			"Get user basic info based on role",
+			requestWithAuth(http.MethodGet, "/admin/users?role=teacher", nil, "admin"),
+			http.StatusOK,
+			[]byte(`[{"Name":"ivan2","Phone":"0881234565","Email":"test2@test.com"}]`),
+		},
+		{
+			"Get user basic info based on role",
+			requestWithAuth(http.MethodGet, "/admin/users?role=student", nil, "admin"),
+			http.StatusOK,
+			[]byte(`[{"FacultyNumber":"12312312","Name":"ivan1","Phone":"0881234564","Email":"test1@test.com"}]`),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			db, err := createDatabaseConnection()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			h := setupHandler(db)
+
 			respRec := httptest.NewRecorder()
 
 			h.ServeHTTP(respRec, test.req)

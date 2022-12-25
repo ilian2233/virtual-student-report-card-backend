@@ -34,19 +34,20 @@ CREATE TABLE IF NOT EXISTS person (
 
 CREATE TABLE IF NOT EXISTS admin (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    person_id TEXT REFERENCES person(email) NOT NULL,
+    person_id TEXT UNIQUE REFERENCES person(email) NOT NULL,
     active BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS student (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	faculty_number TEXT UNIQUE NOT NULL CHECK ( faculty_number ~ '^\d{8}$'),
-    person_id TEXT REFERENCES person(email) NOT NULL
+    person_id TEXT UNIQUE REFERENCES person(email) NOT NULL,
+    active BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS teacher (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    person_id TEXT REFERENCES person(email) NOT NULL,
+    person_id TEXT UNIQUE REFERENCES person(email) NOT NULL,
     active BOOLEAN DEFAULT TRUE
 );
 
@@ -281,7 +282,7 @@ func (conn dbConnection) updateCourse(c Course) error {
 //}
 
 func (conn dbConnection) getAllStudents() (students []Student, err error) {
-	if err = conn.db.Select(&students, "SELECT id as Id, name as Name, phone as Phone, email as Email, faculty_number as FacultyNumber FROM student JOIN person p on p.email = student.person_id"); err != nil {
+	if err = conn.db.Select(&students, "SELECT name as Name, phone as Phone, email as Email, faculty_number as FacultyNumber FROM student JOIN person p on p.email = student.person_id"); err != nil {
 		log.Printf("Failed to get students")
 		return nil, err
 	}
@@ -333,7 +334,7 @@ func (conn dbConnection) updateStudent(s Student) error {
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE student SET person_id=$1 WHERE id=$2", s.Email, s.Id); err != nil {
+	if _, err = tx.Exec("UPDATE student SET person_id=$1 WHERE faculty_number=$2", s.Email, s.FacultyNumber); err != nil {
 		return err
 	}
 
@@ -345,7 +346,7 @@ func (conn dbConnection) updateStudent(s Student) error {
 }
 
 func (conn dbConnection) getAllTeachers() (teachers []Teacher, err error) {
-	if err = conn.db.Select(&teachers, "SELECT id as Id, name as Name, phone as Phone, email as Email FROM teacher JOIN person p on p.email = teacher.person_id"); err != nil {
+	if err = conn.db.Select(&teachers, "SELECT name as Name, phone as Phone, email as Email FROM teacher JOIN person p on p.email = teacher.person_id"); err != nil {
 		log.Printf("Failed to get teachers")
 		return nil, err
 	}
@@ -407,7 +408,8 @@ func (conn dbConnection) updateTeacher(t Teacher) error {
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE teacher SET person_id=$1 WHERE id=$2", t.Email, t.Id); err != nil {
+	//TODO: Fix
+	if _, err = tx.Exec("UPDATE teacher SET person_id=$1 WHERE id=$2", t.Email, "fix"); err != nil {
 		return err
 	}
 
@@ -424,6 +426,17 @@ func (conn dbConnection) delete(table, uuid string) error {
 		return err
 	}
 	return nil
+}
+
+func (conn dbConnection) getUsers(role string) (any, error) {
+	switch role {
+	case "student":
+		return conn.getAllStudents()
+	case "teacher":
+		return conn.getAllTeachers()
+	default:
+		return nil, fmt.Errorf("unknown role")
+	}
 }
 
 func insertPerson(tx *sql.Tx, p person) error {
