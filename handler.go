@@ -33,6 +33,8 @@ type handler struct {
 		insertTeacher(Teacher) error
 		updateTeacher(Teacher) error
 		getUsers(role string) (any, error)
+		getTeacherExams() ([]Exam, error)
+		archiveUser(email, role string) error
 	}
 }
 
@@ -45,14 +47,14 @@ func setupHandler(db dbConnection) *http.ServeMux {
 	mainHandler := http.NewServeMux()
 	mainHandler.HandleFunc("/login", corsHandler(h.handleLogin))
 	mainHandler.HandleFunc("/student/exams", corsHandler(h.getStudentExams))
-	mainHandler.HandleFunc("/teacher/exams", corsHandler(h.postTeacherExams))
+	mainHandler.HandleFunc("/teacher/exams", corsHandler(h.teacherExams))
 	mainHandler.HandleFunc("/teacher/courses", corsHandler(h.getTeacherCourses))
 	mainHandler.HandleFunc("/teacher/students", corsHandler(h.getStudentFacultyNumbers))
 	mainHandler.HandleFunc("/admin/courses", corsHandler(h.courses))
 	//mainHandler.HandleFunc("/admin/exams", corsHandler(h.getExams))
 	mainHandler.HandleFunc("/admin/students", corsHandler(h.students))
 	mainHandler.HandleFunc("/admin/teachers", corsHandler(h.teachers))
-	mainHandler.HandleFunc("/admin/users", corsHandler(h.getUserData))
+	mainHandler.HandleFunc("/admin/users", corsHandler(h.users))
 
 	return mainHandler
 }
@@ -163,8 +165,8 @@ func (h handler) getStudentExams(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
-	email, err := performChecks([]string{http.MethodPost}, "Teacher", r)
+func (h handler) teacherExams(w http.ResponseWriter, r *http.Request) {
+	email, err := performChecks([]string{http.MethodPost, http.MethodGet}, "Teacher", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -187,34 +189,14 @@ func (h handler) postTeacherExams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		msg := "failed to read request body"
-		log.Printf(msg)
-		respondWithMessage(w, msg, http.StatusBadRequest)
-		return
+	switch r.Method {
+	case http.MethodGet:
+		h.getExams(w)
+	case http.MethodPost:
+		h.insertExam(w, r, email)
+	default:
+		respondWithMessage(w, "method not allowed", 400)
 	}
-
-	if len(b) == 0 {
-		log.Printf("request body must not be empty")
-		respondWithMessage(w, "content must be provided in request body", http.StatusBadRequest)
-		return
-	}
-
-	var e Exam
-	if err = json.Unmarshal(b, &e); err != nil {
-		log.Printf("Couldn't unmarshall exams")
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
-		return
-	}
-
-	if err = h.db.insertExam(email, e); err != nil {
-		log.Printf("Exams insert failed with \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
-		return
-	}
-
-	respondWithMessage(w, "success", http.StatusOK)
 }
 
 func (h handler) getTeacherCourses(w http.ResponseWriter, r *http.Request) {
@@ -648,11 +630,86 @@ func (h handler) upsertTeachers(w http.ResponseWriter, r *http.Request, insert b
 }
 
 func (h handler) getUserData(w http.ResponseWriter, r *http.Request) {
-	_, err := performChecks([]string{http.MethodGet}, "Admin", r)
+	role := r.URL.Query().Get("role")
+
+	users, err := h.db.getUsers(role)
+	if err != nil {
+		log.Printf("Failed to get users \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := json.Marshal(users)
+	if err != nil {
+		fmt.Printf("Failed to marshall users \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err = w.Write(resp); err != nil {
+		fmt.Printf("Failed to write users \n%e", err)
+	}
+}
+
+func (h handler) insertExam(w http.ResponseWriter, r *http.Request, email string) {
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		msg := "failed to read request body"
+		log.Printf(msg)
+		respondWithMessage(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	if len(b) == 0 {
+		log.Printf("request body must not be empty")
+		respondWithMessage(w, "content must be provided in request body", http.StatusBadRequest)
+		return
+	}
+
+	var e Exam
+	if err = json.Unmarshal(b, &e); err != nil {
+		log.Printf("Couldn't unmarshall exams")
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	if err = h.db.insertExam(email, e); err != nil {
+		log.Printf("Exams insert failed with \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
+		return
+	}
+
+	respondWithMessage(w, "success", http.StatusOK)
+}
+
+func (h handler) getExams(w http.ResponseWriter) {
+	exams, err := h.db.getTeacherExams()
+	if err != nil {
+		log.Printf("Failed to get exams \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := json.Marshal(exams)
+	if err != nil {
+		fmt.Printf("Failed to marshall exams \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if _, err = w.Write(resp); err != nil {
+		fmt.Printf("Failed to write exams \n%e", err)
+	}
+}
+
+func (h handler) users(w http.ResponseWriter, r *http.Request) {
+	_, err := performChecks([]string{http.MethodGet, http.MethodDelete}, "Admin", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
-		respondWithMessage(w, "Only GET methods are allowed", http.StatusBadRequest)
+		respondWithMessage(w, "Only GET and DELETE methods are allowed", http.StatusBadRequest)
 		return
 	case errors.Is(err, errValidatingJWT):
 		respondWithMessage(w, "unauthorized", http.StatusForbidden)
@@ -671,24 +728,31 @@ func (h handler) getUserData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	switch r.Method {
+	case http.MethodGet:
+		h.getUserData(w, r)
+	case http.MethodDelete:
+		h.archiveUser(w, r)
+	default:
+		respondWithMessage(w, "method not allowed", 400)
+	}
+}
+
+func (h handler) archiveUser(w http.ResponseWriter, r *http.Request) {
+	email := r.URL.Query().Get("email")
 	role := r.URL.Query().Get("role")
 
-	users, err := h.db.getUsers(role)
-	if err != nil {
-		log.Printf("Failed to get users \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+	if email == "" {
+		log.Printf("email must not be empty")
+		respondWithMessage(w, "content must be provided in request body", http.StatusBadRequest)
 		return
 	}
 
-	resp, err := json.Marshal(users)
-	if err != nil {
-		fmt.Printf("Failed to marshall teacherEmails \n%e", err)
-		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
+	if err := h.db.archiveUser(email, role); err != nil {
+		log.Printf("Exams insert failed with \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if _, err = w.Write(resp); err != nil {
-		fmt.Printf("Failed to write teacherEmails \n%e", err)
-	}
+	respondWithMessage(w, "success", http.StatusOK)
 }

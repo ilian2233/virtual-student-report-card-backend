@@ -120,6 +120,12 @@ func Test_main(t *testing.T) {
 			http.StatusOK,
 			[]byte(`[{"FacultyNumber":"12312312","Name":"ivan1","Phone":"0881234564","Email":"test1@test.com"}]`),
 		},
+		{
+			"Archive student",
+			requestWithAuth(http.MethodDelete, "/admin/users?role=student&email=test1%40test.com", nil, "admin"),
+			http.StatusOK,
+			[]byte(`{"message":"success"}`),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

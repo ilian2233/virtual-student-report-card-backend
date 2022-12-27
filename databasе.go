@@ -252,10 +252,11 @@ func (conn dbConnection) getTeacherIdFromEmail(email string) (id string, err err
 }
 
 func (conn dbConnection) getAllCourses() (courses []Course, err error) {
-	if err = conn.db.Select(&courses, "SELECT id, teacher_id as TeacherId, name, number_of_seats as NumberOfSeats FROM course WHERE deleted=FALSE"); err != nil {
+	if err = conn.db.Select(&courses, "SELECT c.id, teacher_id as TeacherId, c.name, number_of_seats as NumberOfSeats, p.name as TeacherName FROM course c JOIN teacher t on t.id = c.teacher_id JOIN person p on p.email = t.person_id WHERE deleted=FALSE"); err != nil {
 		log.Printf("Failed to get courses")
 		return nil, err
 	}
+
 	return courses, nil
 }
 
@@ -273,16 +274,8 @@ func (conn dbConnection) updateCourse(c Course) error {
 	return nil
 }
 
-//func (conn dbConnection) getAllExams() (exams []exam, err error) {
-//	if err = conn.db.Select(&exams, "SELECT id, course_id as courseID, student_faculty_number as studentID, points FROM exam WHERE deleted=FALSE"); err != nil {
-//		log.Printf("Failed to get exams")
-//		return nil, err
-//	}
-//	return exams, nil
-//}
-
 func (conn dbConnection) getAllStudents() (students []Student, err error) {
-	if err = conn.db.Select(&students, "SELECT name as Name, phone as Phone, email as Email, faculty_number as FacultyNumber FROM student JOIN person p on p.email = student.person_id"); err != nil {
+	if err = conn.db.Select(&students, "SELECT name as Name, phone as Phone, email as Email, faculty_number as FacultyNumber FROM student JOIN person p on p.email = student.person_id WHERE student.active=TRUE"); err != nil {
 		log.Printf("Failed to get students")
 		return nil, err
 	}
@@ -346,7 +339,7 @@ func (conn dbConnection) updateStudent(s Student) error {
 }
 
 func (conn dbConnection) getAllTeachers() (teachers []Teacher, err error) {
-	if err = conn.db.Select(&teachers, "SELECT name as Name, phone as Phone, email as Email FROM teacher JOIN person p on p.email = teacher.person_id"); err != nil {
+	if err = conn.db.Select(&teachers, "SELECT name as Name, phone as Phone, email as Email FROM teacher JOIN person p on p.email = teacher.person_id WHERE teacher.active=TRUE"); err != nil {
 		log.Printf("Failed to get teachers")
 		return nil, err
 	}
@@ -467,6 +460,32 @@ func insertPerson(tx *sql.Tx, p person) error {
 	}
 
 	if _, err = tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", p.Name, p.Email, p.Phone, hashedPassword); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (conn dbConnection) getTeacherExams() (exams []Exam, err error) {
+	if err = conn.db.Select(&exams, "SELECT c.name as CourseName, p.name as StudentName, student_faculty_number as StudentFacultyNumber, points as Points FROM exam JOIN student s on s.faculty_number = exam.student_faculty_number JOIN person p on p.email = s.person_id JOIN course c on c.id = exam.course_id WHERE exam.deleted=FALSE"); err != nil {
+		log.Printf("Failed to get exams")
+		return nil, err
+	}
+	return exams, nil
+}
+
+func (conn dbConnection) archiveUser(email, role string) (err error) {
+
+	switch role {
+	case "student":
+		_, err = conn.db.Exec("UPDATE student SET active=FALSE WHERE person_id=$1", email)
+	case "teacher":
+		_, err = conn.db.Exec("UPDATE teacher SET active=FALSE WHERE person_id=$1", email)
+	default:
+		err = fmt.Errorf("unknown table")
+	}
+
+	if err != nil {
+		log.Printf("Failed to delete %s with id %s", role, email)
 		return err
 	}
 	return nil

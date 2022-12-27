@@ -27,6 +27,7 @@ type Teacher struct {
 type Course struct {
 	Id            string
 	TeacherId     string
+	TeacherName   string
 	Name          string
 	NumberOfSeats int
 }
