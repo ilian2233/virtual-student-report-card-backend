@@ -413,8 +413,15 @@ func (conn dbConnection) updateTeacher(t Teacher) error {
 	return nil
 }
 
-func (conn dbConnection) delete(table, uuid string) error {
-	if _, err := conn.db.Exec("UPDATE $1 SET deleted=TRUE WHERE id=$2", table, uuid); err != nil {
+func (conn dbConnection) delete(table, uuid string) (err error) {
+	switch table {
+	case "course":
+		_, err = conn.db.Exec("UPDATE course SET deleted=TRUE WHERE name=$1", uuid)
+	default:
+		err = fmt.Errorf("unknown table")
+	}
+
+	if err != nil {
 		log.Printf("Failed to delete %s with id %s", table, uuid)
 		return err
 	}
