@@ -126,6 +126,12 @@ func Test_main(t *testing.T) {
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
 		},
+		{
+			"Archive course",
+			requestWithAuth(http.MethodDelete, "/admin/courses?CourseName=Math", nil, "admin"),
+			http.StatusOK,
+			[]byte(`{"message":"success"}`),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

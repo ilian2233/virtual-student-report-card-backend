@@ -16,7 +16,18 @@ var (
 	errMissingRole     = errors.New("role is not present in token")
 )
 
-func performChecks(methods []string, role string, r *http.Request) (string, error) {
+type Roles []string
+
+func (r Roles) contains(s string) bool {
+	for _, v := range r {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func (h handler) performChecks(methods []string, role string, r *http.Request) (string, error) {
 	if !isMethodAllowed(methods, r.Method) {
 		return "", errForbiddenMethod
 	}
@@ -31,15 +42,15 @@ func performChecks(methods []string, role string, r *http.Request) (string, erro
 		return "", jwt.ErrTokenInvalidClaims
 	}
 
-	roleClaims := Roles(claims["roles"].([]interface{}))
-
-	if !roleClaims.contains(role) {
-		return "", errMissingRole
-	}
-
 	email := claims["email"].(string)
 	if email == "" {
 		return "", jwt.ErrTokenInvalidId
+	}
+
+	roleClaims := Roles(h.db.getUserRoles(email))
+
+	if !roleClaims.contains(role) {
+		return "", errMissingRole
 	}
 
 	return email, nil

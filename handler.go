@@ -110,17 +110,6 @@ func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type Roles []interface{}
-
-func (r Roles) contains(s string) bool {
-	for _, v := range r {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
 func (h handler) getStudentExams(w http.ResponseWriter, r *http.Request) {
 	email, err := performChecks([]string{http.MethodGet}, "Student", r)
 
@@ -385,9 +374,9 @@ func (h handler) upsertCourses(w http.ResponseWriter, r *http.Request, insert bo
 }
 
 func (h handler) deleteCourse(w http.ResponseWriter, r *http.Request) {
-	courseID := r.URL.Query().Get("id")
+	courseName := r.URL.Query().Get("CourseName")
 
-	if err := h.db.delete("course", courseID); err != nil {
+	if err := h.db.delete("course", courseName); err != nil {
 		log.Printf("Course delete failed with \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusInternalServerError)
 		return
