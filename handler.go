@@ -35,6 +35,7 @@ type handler struct {
 		getUsers(role string) (any, error)
 		getTeacherExams() ([]Exam, error)
 		archiveUser(email, role string) error
+		resendPassword(email string) error
 	}
 }
 
@@ -55,6 +56,7 @@ func setupHandler(db dbConnection) *http.ServeMux {
 	mainHandler.HandleFunc("/admin/students", corsHandler(h.students))
 	mainHandler.HandleFunc("/admin/teachers", corsHandler(h.teachers))
 	mainHandler.HandleFunc("/admin/users", corsHandler(h.users))
+	mainHandler.HandleFunc("/forgotten-password", corsHandler(h.forgottenPassword))
 
 	return mainHandler
 }
@@ -111,7 +113,7 @@ func (h handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) getStudentExams(w http.ResponseWriter, r *http.Request) {
-	email, err := performChecks([]string{http.MethodGet}, "Student", r)
+	email, err := h.performChecks([]string{http.MethodGet}, "Student", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -155,7 +157,7 @@ func (h handler) getStudentExams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) teacherExams(w http.ResponseWriter, r *http.Request) {
-	email, err := performChecks([]string{http.MethodPost, http.MethodGet}, "Teacher", r)
+	email, err := h.performChecks([]string{http.MethodPost, http.MethodGet}, "Teacher", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -189,7 +191,7 @@ func (h handler) teacherExams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) getTeacherCourses(w http.ResponseWriter, r *http.Request) {
-	email, err := performChecks([]string{http.MethodGet}, "Teacher", r)
+	email, err := h.performChecks([]string{http.MethodGet}, "Teacher", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -233,7 +235,7 @@ func (h handler) getTeacherCourses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handler) getStudentFacultyNumbers(w http.ResponseWriter, r *http.Request) {
-	_, err := performChecks([]string{http.MethodGet}, "Teacher", r)
+	_, err := h.performChecks([]string{http.MethodGet}, "Teacher", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -278,7 +280,7 @@ func (h handler) getStudentFacultyNumbers(w http.ResponseWriter, r *http.Request
 }
 
 func (h handler) courses(w http.ResponseWriter, r *http.Request) {
-	_, err := performChecks([]string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete}, "Admin", r)
+	_, err := h.performChecks([]string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete}, "Admin", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -430,7 +432,7 @@ func (h handler) deleteCourse(w http.ResponseWriter, r *http.Request) {
 //}
 
 func (h handler) students(w http.ResponseWriter, r *http.Request) {
-	_, err := performChecks([]string{http.MethodGet, http.MethodPost, http.MethodPatch}, "Admin", r)
+	_, err := h.performChecks([]string{http.MethodGet, http.MethodPost, http.MethodPatch}, "Admin", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -525,7 +527,7 @@ func (h handler) upsertStudents(w http.ResponseWriter, r *http.Request, insert b
 }
 
 func (h handler) teachers(w http.ResponseWriter, r *http.Request) {
-	_, err := performChecks([]string{http.MethodGet, http.MethodPost, http.MethodPatch}, "Admin", r)
+	_, err := h.performChecks([]string{http.MethodGet, http.MethodPost, http.MethodPatch}, "Admin", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -694,7 +696,7 @@ func (h handler) getExams(w http.ResponseWriter) {
 }
 
 func (h handler) users(w http.ResponseWriter, r *http.Request) {
-	_, err := performChecks([]string{http.MethodGet, http.MethodDelete}, "Admin", r)
+	_, err := h.performChecks([]string{http.MethodGet, http.MethodDelete}, "Admin", r)
 
 	switch true {
 	case errors.Is(err, errForbiddenMethod):
@@ -739,6 +741,23 @@ func (h handler) archiveUser(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.db.archiveUser(email, role); err != nil {
 		log.Printf("Exams insert failed with \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
+		return
+	}
+
+	respondWithMessage(w, "success", http.StatusOK)
+}
+
+func (h handler) forgottenPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondWithMessage(w, "Only POST method is allowed", http.StatusBadRequest)
+		return
+	}
+
+	email := r.URL.Query().Get("email")
+
+	if err := h.db.resendPassword(email); err != nil {
+		log.Printf("Failed to resend password with \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
 		return
 	}
