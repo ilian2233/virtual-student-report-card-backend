@@ -132,6 +132,18 @@ func Test_main(t *testing.T) {
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
 		},
+		{
+			"Forgotten password",
+			httptest.NewRequest(http.MethodPost, "/forgotten-password?email=test1%40test.com", nil),
+			http.StatusOK,
+			[]byte(`{"message":"success"}`),
+		},
+		{
+			"Change password",
+			requestWithAuth(http.MethodPost, "/change-password", strings.NewReader(`{"OldPassword":"test_pas_123","NewPassword":"new_test_pas_123"}`), "admin"),
+			http.StatusOK,
+			[]byte(`{"message":"success"}`),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

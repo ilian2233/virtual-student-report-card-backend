@@ -441,18 +441,9 @@ func (conn dbConnection) getUsers(role string) (any, error) {
 
 func insertPerson(tx *sql.Tx, p person) error {
 	defaultPass := []byte(uniuri.NewLen(7))
-	from := os.Getenv("MAIL")
-	emailCred := os.Getenv("PASSWD")
 
-	toList := []string{"ilianbb4@gmail.com"}
-	host := "smtp.gmail.com"
-	port := "587"
-	body := []byte(fmt.Sprintf("To: %s\r\n"+"Subject: Technical university password!\r\n"+"\r\n"+"This is your password: %s\r\n", p.Email, defaultPass))
-
-	auth := smtp.PlainAuth("", from, emailCred, host)
-
-	if err := smtp.SendMail(host+":"+port, auth, from, toList, body); err != nil {
-		fmt.Println(err)
+	if err := sendPassword(string(defaultPass), p.Email); err != nil {
+		log.Println(err)
 		if err = tx.Rollback(); err != nil {
 			return err
 		}
@@ -470,6 +461,20 @@ func insertPerson(tx *sql.Tx, p person) error {
 		return err
 	}
 	return nil
+}
+
+func sendPassword(password, email string) error {
+	from := os.Getenv("MAIL")
+	emailCred := os.Getenv("PASSWD")
+
+	toList := []string{"ilianbb4@gmail.com"}
+	host := "smtp.gmail.com"
+	port := "587"
+	body := []byte(fmt.Sprintf("To: %s\r\n"+"Subject: Technical university password!\r\n"+"\r\n"+"This is your password: %s\r\n", email, password))
+
+	auth := smtp.PlainAuth("", from, emailCred, host)
+
+	return smtp.SendMail(host+":"+port, auth, from, toList, body)
 }
 
 func (conn dbConnection) getTeacherExams() (exams []Exam, err error) {
@@ -493,6 +498,51 @@ func (conn dbConnection) archiveUser(email, role string) (err error) {
 
 	if err != nil {
 		log.Printf("Failed to delete %s with id %s", role, email)
+		return err
+	}
+	return nil
+}
+
+func (conn dbConnection) resendPassword(email string) error {
+	var name string
+	if err := conn.db.Get(&name, "SELECT name FROM person WHERE email=$1", email); err != nil {
+		return err
+	}
+
+	defaultPass := []byte(uniuri.NewLen(7))
+
+	hashedPassword, err := bcrypt.GenerateFromPassword(defaultPass, bcrypt.DefaultCost)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if err = sendPassword(string(defaultPass), email); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if _, err = conn.db.Exec("UPDATE person SET password=$1 WHERE email=$2", hashedPassword, email); err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
+}
+
+func (conn dbConnection) changePassword(email, oldPassword, newPassword string) error {
+
+	if !conn.validateUserLogin(email, []byte(oldPassword)) {
+		return fmt.Errorf("old password doesn't match")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if _, err = conn.db.Exec("UPDATE person SET password=$1 WHERE email=$2", hashedPassword, email); err != nil {
+		log.Println(err)
 		return err
 	}
 	return nil

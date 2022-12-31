@@ -56,6 +56,29 @@ func (h handler) performChecks(methods []string, role string, r *http.Request) (
 	return email, nil
 }
 
+func (h handler) performChecksWithoutRoles(methods []string, r *http.Request) (string, error) {
+	if !isMethodAllowed(methods, r.Method) {
+		return "", errForbiddenMethod
+	}
+
+	token, err := validateToken(r.Header)
+	if err != nil {
+		return "", errValidatingJWT
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", jwt.ErrTokenInvalidClaims
+	}
+
+	email := claims["email"].(string)
+	if email == "" {
+		return "", jwt.ErrTokenInvalidId
+	}
+
+	return email, nil
+}
+
 func isMethodAllowed(methods []string, method string) bool {
 	for _, v := range methods {
 		if v == method {
