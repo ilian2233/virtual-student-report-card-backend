@@ -504,34 +504,46 @@ func (conn dbConnection) archiveUser(email, role string) (err error) {
 }
 
 func (conn dbConnection) resendPassword(email string) error {
+	var name string
+	if err := conn.db.Get(&name, "SELECT name FROM person WHERE email=$1", email); err != nil {
+		return err
+	}
+
 	defaultPass := []byte(uniuri.NewLen(7))
 
-	tx, err := conn.db.Beginx()
+	hashedPassword, err := bcrypt.GenerateFromPassword(defaultPass, bcrypt.DefaultCost)
 	if err != nil {
+		log.Println(err)
 		return err
 	}
 
 	if err = sendPassword(string(defaultPass), email); err != nil {
 		log.Println(err)
-		if err = tx.Rollback(); err != nil {
-			return err
-		}
+		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword(defaultPass, bcrypt.DefaultCost)
-	if err != nil {
+	if _, err = conn.db.Exec("UPDATE person SET password=$1 WHERE email=$2", hashedPassword, email); err != nil {
 		log.Println(err)
-		if err = tx.Rollback(); err != nil {
-			return err
-		}
+		return err
+	}
+	return nil
+}
+
+func (conn dbConnection) changePassword(email, oldPassword, newPassword string) error {
+
+	if !conn.validateUserLogin(email, []byte(oldPassword)) {
+		return fmt.Errorf("old password doesn't match")
 	}
 
-	_, err = conn.db.Exec("UPDATE person SET password=$1 WHERE email=$2", hashedPassword, email)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		log.Println(err)
-		if err = tx.Rollback(); err != nil {
-			return err
-		}
+		return err
+	}
+
+	if _, err = conn.db.Exec("UPDATE person SET password=$1 WHERE email=$2", hashedPassword, email); err != nil {
+		log.Println(err)
+		return err
 	}
 	return nil
 }

@@ -140,7 +140,7 @@ func Test_main(t *testing.T) {
 		},
 		{
 			"Change password",
-			httptest.NewRequest(http.MethodPost, "/reset-password", strings.NewReader(`{"OldPassword":"test_pas_123","NewPassword":"new_test_pas_123"}`)),
+			requestWithAuth(http.MethodPost, "/change-password", strings.NewReader(`{"OldPassword":"test_pas_123","NewPassword":"new_test_pas_123"}`), "admin"),
 			http.StatusOK,
 			[]byte(`{"message":"success"}`),
 		},
