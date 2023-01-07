@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"math/rand"
 	"net/smtp"
 	"os"
+	"time"
 
 	"github.com/dchest/uniuri"
+	"github.com/go-redis/redis/v8"
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -29,7 +32,7 @@ CREATE TABLE IF NOT EXISTS person (
     email TEXT NOT NULL PRIMARY KEY UNIQUE CHECK (email ~ '^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+[.][A-Za-z]+$'),
     name TEXT NOT NULL CHECK (name <> ''),
     phone TEXT,
-    password TEXT NOT NULL CHECK (password <> '')
+    password TEXT
 );
 
 CREATE TABLE IF NOT EXISTS admin (
@@ -87,10 +90,13 @@ INSERT INTO teacher(person_id) VALUES
 
 INSERT INTO course(teacher_id, name) VALUES 
     ((SELECT id FROM teacher LIMIT 1), 'Math'), 
-    ((SELECT id FROM teacher LIMIT 1), 'Programming Basics');
+    ((SELECT id FROM teacher LIMIT 1), 'Programming Basics'),
+    ((SELECT id FROM teacher LIMIT 1), 'Physics');
 
 INSERT INTO exam(course_id, student_faculty_number, points) VALUES 
-    ((SELECT id FROM course WHERE name='Math' LIMIT 1),(SELECT faculty_number FROM student LIMIT 1), 56);
+    ((SELECT id FROM course WHERE name='Math' LIMIT 1),(SELECT faculty_number FROM student LIMIT 1), 56),
+    ((SELECT id FROM course WHERE name='Physics' LIMIT 1),(SELECT faculty_number FROM student LIMIT 1), 88),
+    ((SELECT id FROM course WHERE name='Programming Basics' LIMIT 1),(SELECT faculty_number FROM student LIMIT 1), 67);
 `
 )
 
@@ -439,44 +445,6 @@ func (conn dbConnection) getUsers(role string) (any, error) {
 	}
 }
 
-func insertPerson(tx *sql.Tx, p person) error {
-	defaultPass := []byte(uniuri.NewLen(7))
-
-	if err := sendPassword(string(defaultPass), p.Email); err != nil {
-		log.Println(err)
-		if err = tx.Rollback(); err != nil {
-			return err
-		}
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword(defaultPass, bcrypt.DefaultCost)
-	if err != nil {
-		log.Println(err)
-		if err = tx.Rollback(); err != nil {
-			return err
-		}
-	}
-
-	if _, err = tx.Exec("INSERT INTO person(name, email, phone, password) VALUES ($1, $2, $3, $4)", p.Name, p.Email, p.Phone, hashedPassword); err != nil {
-		return err
-	}
-	return nil
-}
-
-func sendPassword(password, email string) error {
-	from := os.Getenv("MAIL")
-	emailCred := os.Getenv("PASSWD")
-
-	toList := []string{"ilianbb4@gmail.com"}
-	host := "smtp.gmail.com"
-	port := "587"
-	body := []byte(fmt.Sprintf("To: %s\r\n"+"Subject: Technical university password!\r\n"+"\r\n"+"This is your password: %s\r\n", email, password))
-
-	auth := smtp.PlainAuth("", from, emailCred, host)
-
-	return smtp.SendMail(host+":"+port, auth, from, toList, body)
-}
-
 func (conn dbConnection) getTeacherExams() (exams []Exam, err error) {
 	if err = conn.db.Select(&exams, "SELECT c.name as CourseName, p.name as StudentName, student_faculty_number as StudentFacultyNumber, points as Points FROM exam JOIN student s on s.faculty_number = exam.student_faculty_number JOIN person p on p.email = s.person_id JOIN course c on c.id = exam.course_id WHERE exam.deleted=FALSE"); err != nil {
 		log.Printf("Failed to get exams")
@@ -503,30 +471,65 @@ func (conn dbConnection) archiveUser(email, role string) (err error) {
 	return nil
 }
 
+func insertPerson(tx *sql.Tx, p person) error {
+	if _, err := tx.Exec("INSERT INTO person(name, email, phone) VALUES ($1, $2, $3)", p.Name, p.Email, p.Phone); err != nil {
+		return err
+	}
+
+	if err := sendPasswordCodeEmail(tx, p.Email); err != nil {
+		if err = tx.Rollback(); err != nil {
+			return err
+		}
+		return err
+	}
+	return nil
+}
+
 func (conn dbConnection) resendPassword(email string) error {
-	var name string
-	if err := conn.db.Get(&name, "SELECT name FROM person WHERE email=$1", email); err != nil {
-		return err
-	}
+	tx, _ := conn.db.Begin()
 
-	defaultPass := []byte(uniuri.NewLen(7))
+	defer func(tx *sql.Tx) {
+		_ = tx.Commit()
+	}(tx)
 
-	hashedPassword, err := bcrypt.GenerateFromPassword(defaultPass, bcrypt.DefaultCost)
-	if err != nil {
+	return sendPasswordCodeEmail(tx, email)
+}
+
+func sendPasswordCodeEmail(tx *sql.Tx, email string) error {
+	//if row := tx.QueryRow("SELECT name FROM person WHERE email=$1", email); row.Err() != nil {
+	//	_ = tx.Rollback()
+	//	return row.Err()
+	//}
+
+	code := uniuri.NewLen(7)
+
+	if err := saveCodeAndEmail(code, email); err != nil {
+		_ = tx.Rollback()
 		log.Println(err)
 		return err
 	}
 
-	if err = sendPassword(string(defaultPass), email); err != nil {
-		log.Println(err)
-		return err
-	}
-
-	if _, err = conn.db.Exec("UPDATE person SET password=$1 WHERE email=$2", hashedPassword, email); err != nil {
+	if err := sendCode(code, email); err != nil {
 		log.Println(err)
 		return err
 	}
 	return nil
+}
+
+func sendCode(code, email string) error {
+	from := os.Getenv("MAIL")
+	emailCred := os.Getenv("PASSWD")
+
+	urlAndCode := fmt.Sprintf("http://localhost:5173?code=%s", code)
+
+	toList := []string{"ilianbb4@gmail.com"}
+	host := "smtp.gmail.com"
+	port := "587"
+	body := []byte(fmt.Sprintf("To: %s\r\n"+"Subject: Technical university password!\r\n"+"\r\n"+"Please create your password at: %s\r\n", email, urlAndCode))
+
+	auth := smtp.PlainAuth("", from, emailCred, host)
+
+	return smtp.SendMail(host+":"+port, auth, from, toList, body)
 }
 
 func (conn dbConnection) changePassword(email, oldPassword, newPassword string) error {
@@ -535,7 +538,43 @@ func (conn dbConnection) changePassword(email, oldPassword, newPassword string) 
 		return fmt.Errorf("old password doesn't match")
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	return conn.bcryptAndSavePassword(email, newPassword)
+}
+
+func (conn dbConnection) createPassword(code, password string) error {
+	email, err := getEmailFromCode(code)
+	if err != nil {
+		return err
+	}
+
+	return conn.bcryptAndSavePassword(email, password)
+}
+
+func getEmailFromCode(code string) (string, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+	res := client.Get(context.Background(), code)
+	if res.Err() == redis.Nil {
+		return "", fmt.Errorf("code not found")
+	}
+	return res.Val(), nil
+}
+
+func saveCodeAndEmail(code string, email string) error {
+	client := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+	res := client.Set(context.Background(), code, email, time.Hour)
+	return res.Err()
+}
+
+func (conn dbConnection) bcryptAndSavePassword(email, password string) error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Println(err)
 		return err
