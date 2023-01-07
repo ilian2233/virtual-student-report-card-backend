@@ -37,6 +37,7 @@ type handler struct {
 		archiveUser(email, role string) error
 		resendPassword(email string) error
 		changePassword(email, oldPassword, NewPassword string) error
+		createPassword(code, password string) error
 	}
 }
 
@@ -59,6 +60,7 @@ func setupHandler(db dbConnection) *http.ServeMux {
 	mainHandler.HandleFunc("/admin/users", corsHandler(h.users))
 	mainHandler.HandleFunc("/forgotten-password", corsHandler(h.forgottenPassword))
 	mainHandler.HandleFunc("/change-password", corsHandler(h.changePassword))
+	mainHandler.HandleFunc("/createPassword", corsHandler(h.createPassword))
 
 	return mainHandler
 }
@@ -799,6 +801,32 @@ func (h handler) changePassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err = h.db.changePassword(email, passwords.OldPassword, passwords.NewPassword); err != nil {
+		log.Printf("Failed to change password with \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
+		return
+	}
+
+	respondWithMessage(w, "success", http.StatusOK)
+}
+
+func (h handler) createPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondWithMessage(w, "Only POST method is allowed", http.StatusBadRequest)
+		return
+	}
+
+	var Body struct {
+		Code     string
+		Password string
+	}
+	byteValue, _ := io.ReadAll(r.Body)
+	if err := json.Unmarshal(byteValue, &Body); err != nil {
+		log.Printf("Failed to unmarshal password with \n%e", err)
+		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.db.createPassword(Body.Code, Body.Password); err != nil {
 		log.Printf("Failed to change password with \n%e", err)
 		respondWithMessage(w, "something went wrong", http.StatusBadRequest)
 		return
